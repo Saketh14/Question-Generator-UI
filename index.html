@@ -1,0 +1,75 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Learning Question Generator</title>
+<link rel="stylesheet" href="C:\Users\saisa\OneDrive\Desktop\Question Generator UI\style.css">
+</head>
+<body>
+<div class="container">
+<header>
+<h1>Learning Question Generator</h1>
+<p class="lead">Enter an <strong>area to learn</strong> and optionally your <strong>hobbies</strong>. Generate practice questions, write an answer, and evaluate yourself.</p>
+</header>
+
+
+<!-- Inputs -->
+<section class="card">
+<div class="row two">
+<div>
+<label for="topic">Area you want to learn</label>
+<input id="topic" type="text" placeholder="e.g., Batting, Bowling, Fielding, Umpring" />
+</div>
+<div>
+<label for="hobby">Your hobbies (optional)</label>
+<input id="hobby" type="text" placeholder="e.g., cricket, music, photography" />
+</div>
+</div>
+<div class="spacer"></div>
+<div class="actions">
+<button id="btn-generate">Generate Questions</button>
+<button class="ghost" id="btn-clear">Clear</button>
+</div>
+</section>
+
+
+<!-- Problem viewer -->
+<section class="card">
+<div class="problem-header">
+<strong>Problem</strong>
+<span class="pill" id="q-meta">—</span>
+</div>
+<div id="problem" class="problem-box">No question yet. Click <em>Generate Questions</em>.</div>
+
+
+<div class="spacer"></div>
+<div class="actions">
+<button class="secondary" id="btn-prev">◀ Previous</button>
+<button class="secondary" id="btn-next">Next ▶</button>
+</div>
+</section>
+
+
+<!-- Answer + Evaluate -->
+<section class="card">
+<label for="answer">Your Answer</label>
+<textarea id="answer" placeholder="Type your answer here..."></textarea>
+<div class="spacer"></div>
+<div class="actions">
+<button id="btn-eval">Evaluate</button>
+<button class="ghost" id="btn-sample">Show Sample Answer</button>
+</div>
+<div class="status" id="status"></div>
+</section>
+
+
+<p class="footer-note">Prototype — local-only evaluation using simple keyword matching. Replace logic with a backend or LLM later.</p>
+</div>
+
+
+<script src="C:\Users\saisa\OneDrive\Desktop\Question Generator UI\script.js"></script>
+</html>
+
+
