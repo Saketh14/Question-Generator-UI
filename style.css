@@ -1,7 +1,11 @@
+/* ---------- Theme ---------- */
 :root {
-  --bg: #f6f7fb;
+  --bg: #0b1020;
+  /* deep space base to make glows pop, masked by paper layer */
+  --paper: #f7f9ffE6;
+  /* frosted paper overlay */
   --card: #ffffff;
-  --text: #1f2937;
+  --text: #111827;
   --muted: #6b7280;
   --border: #e5e7eb;
   --primary: #2563eb;
@@ -13,24 +17,78 @@
   --radius: 14px;
 }
 
+/* ---------- Global ---------- */
 * {
   box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
 }
 
 body {
   margin: 0;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
   color: var(--text);
-  background: var(--bg);
-  display: grid;
-  place-items: start center;
-  min-height: 100vh;
-  padding: 24px;
+  /* base cosmic gradient (muted by paper layer) */
+  background:
+    radial-gradient(60rem 60rem at 15% 10%, rgba(37, 99, 235, .30), transparent 60%),
+    radial-gradient(50rem 50rem at 85% 20%, rgba(16, 185, 129, .22), transparent 60%),
+    radial-gradient(40rem 40rem at 15% 90%, rgba(244, 114, 182, .20), transparent 60%),
+    var(--bg);
+}
+
+/* graph-paper “math sheet” over the gradient */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    /* subtle white paper */
+    linear-gradient(rgba(255, 255, 255, .86), rgba(255, 255, 255, .86)),
+    /* grid lines */
+    repeating-linear-gradient(0deg, transparent 0 39px, rgba(37, 99, 235, .10) 40px),
+    repeating-linear-gradient(90deg, transparent 0 39px, rgba(37, 99, 235, .08) 40px);
+}
+
+/* floating equations (very subtle) */
+.bg-math {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-size: 320px 320px;
+  opacity: .08;
+  background-image: url("data:image/svg+xml;utf8,\
+  <svg xmlns='http://www.w3.org/2000/svg' width='320' height='320' viewBox='0 0 320 320' fill='none'>\
+    <g stroke='%231e3a8a' stroke-width='1' opacity='.8'>\
+      <path d='M20 60 q40-30 80 0 q40 30 80 0'/>\
+      <text x='18' y='40' font-size='18' font-family='ui-monospace, Menlo, Consolas' fill='%231e3a8a'>∫</text>\
+      <text x='120' y='48' font-size='16' font-family='ui-monospace, Menlo, Consolas' fill='%231e3a8a'>πr²</text>\
+      <text x='220' y='44' font-size='16' font-family='ui-monospace, Menlo, Consolas' fill='%231e3a8a'>a²+b²=c²</text>\
+      <text x='40' y='140' font-size='16' font-family='ui-monospace, Menlo, Consolas' fill='%231e3a8a'>f(x)=x²</text>\
+      <text x='200' y='140' font-size='16' font-family='ui-monospace, Menlo, Consolas' fill='%231e3a8a'>E=np</text>\
+      <text x='40' y='240' font-size='16' font-family='ui-monospace, Menlo, Consolas' fill='%231e3a8a'>sin²θ+cos²θ=1</text>\
+      <text x='210' y='240' font-size='16' font-family='ui-monospace, Menlo, Consolas' fill='%231e3a8a'>∂/∂x</text>\
+    </g></svg>");
+}
+
+.top-accent {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 8px;
+  z-index: 1;
+  background: linear-gradient(90deg, #8b5cf6, #2563eb 40%, #22c55e 70%, #f472b6);
+  opacity: .9;
 }
 
 .container {
   width: 100%;
   max-width: 980px;
+  margin-inline: auto;
+  padding: 24px;
 }
 
 header {
@@ -40,6 +98,7 @@ header {
 h1 {
   font-size: 28px;
   margin: 0 0 8px;
+  letter-spacing: .2px;
 }
 
 .lead {
@@ -47,15 +106,19 @@ h1 {
   margin: 0;
 }
 
+/* ---------- Cards ---------- */
 .card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, .06);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, .06),
+    0 1px 0 rgba(255, 255, 255, .6) inset;
   padding: 20px;
   margin-bottom: 18px;
 }
 
+/* ---------- Layout ---------- */
 .row {
   display: grid;
   grid-template-columns: 1fr;
@@ -81,9 +144,10 @@ h1 {
   }
 }
 
+/* ---------- Form ---------- */
 label {
   display: block;
-  font-weight: 600;
+  font-weight: 700;
   margin-bottom: 6px;
 }
 
@@ -98,6 +162,7 @@ textarea {
   font-size: 15px;
   background: #fff;
   color: var(--text);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .02) inset;
 }
 
 select {
@@ -128,14 +193,11 @@ textarea {
   min-height: 110px;
 }
 
+/* ---------- Buttons ---------- */
 .actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-}
-
-.spacer {
-  height: 6px;
 }
 
 button {
@@ -144,14 +206,16 @@ button {
   border-radius: 10px;
   padding: 10px 14px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 700;
   background: var(--primary);
   color: #fff;
   transition: transform .02s ease, background .2s ease, box-shadow .2s ease;
+  box-shadow: 0 6px 18px rgba(37, 99, 235, .25);
 }
 
 button:hover {
   background: var(--primary-600);
+  box-shadow: 0 8px 22px rgba(29, 78, 216, .28);
 }
 
 button:active {
@@ -162,25 +226,29 @@ button.secondary {
   background: #1118270d;
   color: #111827;
   border: 1px solid var(--border);
+  box-shadow: none;
 }
 
 button.ghost {
   background: transparent;
   color: var(--muted);
   border: 1px dashed var(--border);
+  box-shadow: none;
 }
 
 button.danger {
   background: var(--danger);
+  box-shadow: 0 6px 18px rgba(220, 38, 38, .22);
 }
 
-/* special styling for the Generate button to match screenshot */
+/* special look for Generate button (dashed focus ring like screenshot) */
 #btn-generate {
   background: var(--primary);
-  border: 2px dashed #1f3fb3;
   color: #fff;
+  border: 2px dashed #1f3fb3;
 }
 
+/* ---------- Problem ---------- */
 .problem-header {
   display: flex;
   align-items: center;
@@ -204,6 +272,7 @@ button.danger {
   min-height: 100px;
 }
 
+/* ---------- Status & Lists ---------- */
 .status {
   margin-top: 8px;
   font-size: 14px;
@@ -258,7 +327,7 @@ button.danger {
 .stat span {
   display: block;
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .stat label {
@@ -268,4 +337,16 @@ button.danger {
 
 .mt {
   margin-top: 10px;
+}
+
+/* ---------- Extra: very subtle grid on top of paper (for depth) ---------- */
+.bg-grid {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    radial-gradient(60rem 60rem at 10% 0%, rgba(37, 99, 235, .10), transparent 60%),
+    radial-gradient(50rem 50rem at 90% 100%, rgba(16, 185, 129, .12), transparent 60%);
+  mix-blend-mode: multiply;
 }
