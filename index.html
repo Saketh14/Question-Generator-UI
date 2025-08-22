@@ -1,20 +1,20 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Math Trainer — Algebra, Calculus & More</title>
+  <title>Math Trainer</title>
   <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
   <div class="container">
+
     <header>
       <h1>Math Trainer</h1>
-      <p class="lead">Choose a math area (min. 5 topics available), generate a question, write your answer, and get
-        instant feedback. Hobbies are <strong>sports only</strong> for personalization.</p>
+      <p class="lead">
+        Choose a math area (min. 5 topics available), generate a question, write your answer, and get instant feedback.
+        Hobbies are <strong>sports only</strong> for personalization.
+      </p>
     </header>
 
     <!-- Inputs -->
@@ -29,24 +29,44 @@
             <option value="geometry">Geometry</option>
             <option value="trigonometry">Trigonometry</option>
             <option value="probability">Probability</option>
-            <option value="mix">Mix (All Topics)</option>
+            <option value="mix">Mix (All topics)</option>
           </select>
           <small class="hint">Required</small>
         </div>
+
         <div>
-          <label for="hobby">Your sport (optional)</label>
+          <label for="hobby">Your sport</label>
           <select id="hobby">
-            <option value="">Choose a sport (optional)…</option>
-            <option>cricket</option>
-            <option>football</option>
-            <option>soccer</option>
-            <option>basketball</option>
-            <option>tennis</option>
-            <option>badminton</option>
-            <option>swimming</option>
-            <option>running</option>
+            <option value="" selected>Choose a sport</option>
+            <option value="cricket">Cricket</option>
+            <option value="football">Football</option>
+            <option value="soccer">Soccer</option>
+            <option value="basketball">Basketball</option>
+            <option value="tennis">Tennis</option>
           </select>
+           <small class="hint">Required</small>
         </div>
+
+        <div>
+          <label for="difficulty">Challenge level</label>
+          <select id="difficulty" required>
+            <option value="" disabled selected>Choose a level…</option>
+            <option value="easy">Easy</option>
+            <option value="moderate">Moderate</option>
+            <option value="hard">Hard</option>
+          </select>
+          <small class="hint">Required</small>
+        </div>
+
+        <div>
+          <label for="grade">Student grade (7–10)</label>
+          <select id="grade" required>
+            <option value="" disabled selected>Choose grade…</option>
+            <option>7</option><option>8</option><option>9</option><option>10</option>
+          </select>
+          <small class="hint">Required</small>
+        </div>
+
         <div class="spacer"></div>
         <div class="actions">
           <button type="submit" id="btn-generate">Generate Questions</button>
@@ -102,7 +122,7 @@
       </div>
     </section>
 
+  </div>
   <script defer src="script.js"></script>
 </body>
-
 </html>
