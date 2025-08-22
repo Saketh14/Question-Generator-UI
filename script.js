@@ -222,7 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
     sampleBtn.addEventListener('click', () => {
       if (!state.questions.length) return;
       const q = state.questions[state.idx];
-      $('status').innerHTML = `<em>Sample outline:</em> ${q.sample()}`;
+      $('status').innerHTML = `<em>Sample outline:</em> ${q.sample}`;
     });
   }
 
