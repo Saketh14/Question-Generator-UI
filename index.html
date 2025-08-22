@@ -4,19 +4,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Learning Question Generator</title>
+  <title>Question-Generator-UI</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="container">
     <header>
-      <h1>Learning Question Generator</h1>
-      <p class="lead">Choose a <strong>cricket area</strong> and optionally add your <strong>hobbies</strong>. Generate practice questions, write an answer, and evaluate yourself.</p>
+      <h1>Cricket Trainer</h1>
+      <p class="lead">Pick a <strong>cricket area</strong>, generate a question, write your answer, and get instant feedback.</p>
     </header>
 
     <!-- Inputs -->
     <section class="card">
-      <div class="row two">
+      <form id="generator-form" class="row two" novalidate>
         <div>
           <label for="topic">Area you want to learn</label>
           <select id="topic" required>
@@ -26,17 +26,18 @@
             <option>Fielding</option>
             <option>Umpiring</option>
           </select>
+          <small class="hint">Required</small>
         </div>
         <div>
           <label for="hobby">Your hobbies (optional)</label>
-          <input id="hobby" type="text" placeholder="e.g., cricket, music, photography" />
+          <input id="hobby" type="text" placeholder="e.g., fitness, analytics, photography" />
         </div>
-      </div>
-      <div class="spacer"></div>
-      <div class="actions">
-        <button id="btn-generate">Generate Questions</button>
-        <button class="ghost" id="btn-clear">Clear</button>
-      </div>
+        <div class="spacer"></div>
+        <div class="actions">
+          <button type= "submit" id="btn-generate">Generate Questions</button>
+          <button type="button" class="ghost" id="btn-clear">Clear</button>
+        </div>
+      </form>
     </section>
 
     <!-- Problem viewer -->
@@ -45,12 +46,13 @@
         <strong>Problem</strong>
         <span class="pill" id="q-meta">—</span>
       </div>
-      <div id="problem" class="problem-box">No question yet. Click <em>Generate Questions</em>.</div>
+      <div id="problem" class="problem-box">No question yet. Choose an area and click <em>Generate Questions</em>.</div>
 
       <div class="spacer"></div>
       <div class="actions">
-        <button class="secondary" id="btn-prev">◀ Previous</button>
-        <button class="secondary" id="btn-next">Next ▶</button>
+        <button type="button" class="secondary" id="btn-prev">◀ Previous</button>
+        <button type="button" class="secondary" id="btn-next">Next ▶</button>
+        <button type="button" class="ghost" id="btn-copy">Copy Question</button>
       </div>
     </section>
 
@@ -60,14 +62,33 @@
       <textarea id="answer" placeholder="Type your answer here..."></textarea>
       <div class="spacer"></div>
       <div class="actions">
-        <button id="btn-eval">Evaluate</button>
-        <button class="ghost" id="btn-sample">Show Sample Answer</button>
+        <button type="button" id="btn-eval">Evaluate</button>
+        <button type="button" class="ghost" id="btn-sample">Show Sample Answer</button>
       </div>
-      <div class="status" id="status"></div>
+      <div class="status" id="status" aria-live="polite"></div>
     </section>
 
-    </div>
+    <!-- History / Progress -->
+    <section class="card">
+      <div class="row aside">
+        <div>
+          <h3 class="section-title">Progress</h3>
+          <ul id="history-list" class="history"></ul>
+        </div>
+        <aside>
+          <div class="stats">
+            <div class="stat"><span id="avg-score">—</span><label>Avg Score</label></div>
+            <div class="stat"><span id="attempts">0</span><label>Attempts</label></div>
+          </div>
+          <div class="actions mt">
+            <button type="button" class="danger" id="btn-reset">Reset History</button>
+          </div>
+        </aside>
+      </div>
+    </section>
 
-  <script src="script.js"></script>
+
+  <script defer src="script.js"></script>
 </body>
 </html>
+
