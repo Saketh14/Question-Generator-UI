@@ -1,9 +1,6 @@
 /* ---------- Theme ---------- */
 :root {
   --bg: #0b1020;
-  /* deep space base to make glows pop, masked by paper layer */
-  --paper: #f7f9ffE6;
-  /* frosted paper overlay */
   --card: #ffffff;
   --text: #111827;
   --muted: #6b7280;
@@ -17,7 +14,7 @@
   --radius: 14px;
 }
 
-/* ---------- Global ---------- */
+/* ---------- Background ---------- */
 * {
   box-sizing: border-box;
 }
@@ -31,29 +28,44 @@ body {
   margin: 0;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
   color: var(--text);
-  /* base cosmic gradient (muted by paper layer) */
   background:
     radial-gradient(60rem 60rem at 15% 10%, rgba(37, 99, 235, .30), transparent 60%),
     radial-gradient(50rem 50rem at 85% 20%, rgba(16, 185, 129, .22), transparent 60%),
     radial-gradient(40rem 40rem at 15% 90%, rgba(244, 114, 182, .20), transparent 60%),
-    var(--bg);
+    #0b1020;
 }
 
-/* graph-paper “math sheet” over the gradient */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
   background:
-    /* subtle white paper */
     linear-gradient(rgba(255, 255, 255, .86), rgba(255, 255, 255, .86)),
-    /* grid lines */
     repeating-linear-gradient(0deg, transparent 0 39px, rgba(37, 99, 235, .10) 40px),
     repeating-linear-gradient(90deg, transparent 0 39px, rgba(37, 99, 235, .08) 40px);
 }
 
-/* floating equations (very subtle) */
+.top-accent {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 8px;
+  z-index: 1;
+  background: linear-gradient(90deg, #8b5cf6, #2563eb 40%, #22c55e 70%, #f472b6);
+  opacity: .9;
+}
+
+.bg-grid {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    radial-gradient(60rem 60rem at 10% 0%, rgba(37, 99, 235, .10), transparent 60%),
+    radial-gradient(50rem 50rem at 90% 100%, rgba(16, 185, 129, .12), transparent 60%);
+  mix-blend-mode: multiply;
+}
+
 .bg-math {
   position: fixed;
   inset: 0;
@@ -75,15 +87,7 @@ body::before {
     </g></svg>");
 }
 
-.top-accent {
-  position: fixed;
-  inset: 0 0 auto 0;
-  height: 8px;
-  z-index: 1;
-  background: linear-gradient(90deg, #8b5cf6, #2563eb 40%, #22c55e 70%, #f472b6);
-  opacity: .9;
-}
-
+/* ---------- Layout ---------- */
 .container {
   width: 100%;
   max-width: 980px;
@@ -106,32 +110,21 @@ h1 {
   margin: 0;
 }
 
-/* ---------- Cards ---------- */
+/* ---------- Card ---------- */
 .card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow:
-    0 10px 30px rgba(0, 0, 0, .06),
-    0 1px 0 rgba(255, 255, 255, .6) inset;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .06), 0 1px 0 rgba(255, 255, 255, .6) inset;
   padding: 20px;
   margin-bottom: 18px;
 }
 
-/* ---------- Layout ---------- */
+/* ---------- Grid ---------- */
 .row {
   display: grid;
   grid-template-columns: 1fr;
   gap: 12px;
-}
-
-.row.two {
-  grid-template-columns: 1fr;
-}
-
-.row.aside {
-  grid-template-columns: 1fr;
-  gap: 16px;
 }
 
 @media (min-width:720px) {
@@ -141,6 +134,7 @@ h1 {
 
   .row.aside {
     grid-template-columns: 2fr 1fr;
+    gap: 16px;
   }
 }
 
@@ -198,6 +192,7 @@ textarea {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 button {
@@ -241,14 +236,41 @@ button.danger {
   box-shadow: 0 6px 18px rgba(220, 38, 38, .22);
 }
 
-/* special look for Generate button (dashed focus ring like screenshot) */
 #btn-generate {
   background: var(--primary);
   color: #fff;
   border: 2px dashed #1f3fb3;
 }
 
-/* ---------- Problem ---------- */
+/* Qty control */
+.qty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #f9fafb;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.qty label {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.qty input {
+  width: 78px;
+  padding: 8px 10px;
+  border: 1px solid #dbe1ea;
+  border-radius: 8px;
+  background: #fff;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* ---------- Problem & Choices ---------- */
 .problem-header {
   display: flex;
   align-items: center;
@@ -270,6 +292,41 @@ button.danger {
   border-radius: 12px;
   padding: 16px;
   min-height: 100px;
+}
+
+.choices{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:12px;
+  margin-bottom:16px; /* <-- new space underneath */
+}
+
+.choice {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 700;
+  color: #1f2937;
+  transition: transform .02s ease, box-shadow .2s ease;
+}
+
+.choice:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .08);
+}
+
+.choice.correct {
+  background: #ecfdf5;
+  border-color: #10b981;
+  color: #065f46;
+}
+
+.choice.wrong {
+  background: #fef2f2;
+  border-color: #ef4444;
+  color: #991b1b;
 }
 
 /* ---------- Status & Lists ---------- */
@@ -337,16 +394,4 @@ button.danger {
 
 .mt {
   margin-top: 10px;
-}
-
-/* ---------- Extra: very subtle grid on top of paper (for depth) ---------- */
-.bg-grid {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-  background:
-    radial-gradient(60rem 60rem at 10% 0%, rgba(37, 99, 235, .10), transparent 60%),
-    radial-gradient(50rem 50rem at 90% 100%, rgba(16, 185, 129, .12), transparent 60%);
-  mix-blend-mode: multiply;
 }

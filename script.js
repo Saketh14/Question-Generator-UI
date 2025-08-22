@@ -1,377 +1,434 @@
-// script.js — vanilla, keeps your UX; loads curated first, fills to 3
+// script.js — Interactive & “funny” questions via a tiny local LLM (JSON + templates)
 'use strict';
 const $ = (id) => document.getElementById(id);
 
-/* ------------------ Sports (5 only) ------------------ */
-const SPORTS = ['cricket', 'football', 'soccer', 'basketball', 'tennis'];
-function validSport(s) { return SPORTS.includes((s || '').toLowerCase()); }
-function sportOrDefault(s) { return s ? (validSport(s) ? s.toLowerCase() : 'your sport') : ''; }
-
-/* ------------------ Curated Bank ------------------ */
-/* (Cricket Algebra G7–10; Calculus–Tennis G10; Geometry–Soccer G8;
-   Algebra for Basketball & Football G7–10) */
-const CURATED = {
-  algebra: {
-    cricket: {
-      7: {
-        easy: [
-          { text: 'A batsman scores 15 and 23. To average 20 over 3 matches, how many in the third?', sample: 'Total needed 20×3=60; so far 15+23=38; x=60−38=22.', keywords: ['average', '20', '60', '15', '23', 'runs', 'third', '22'] },
-          { text: 'Losing team: 120 runs. Winners scored 15 more. Find the winners’ score s.', sample: 's=120+15=135.', keywords: ['equation', '120', '15', '135', 'runs'] }
-        ],
-        moderate: [
-          { text: 'First innings: w wickets. Second: 2w+3. Total 18. Find w.', sample: 'w+(2w+3)=18 ⇒ 3w=15 ⇒ w=5.', keywords: ['wickets', 'system', '18', '2w+3', 'w=5'] },
-          { text: 'Total 200 runs. Boundaries = 3s−20; singles/doubles = s. Find s and both parts.', sample: 's+(3s−20)=200 ⇒ 4s=220 ⇒ s=55; boundaries=145.', keywords: ['boundaries', 'singles', 'doubles', '200', '55', '145'] }
-        ],
-        hard: [
-          { text: 'Avg 35 over 8 innings. After 9th, avg 37. Runs in 9th?', sample: '8×35=280; 9×37=333; 333−280=53.', keywords: ['average', '35', '37', '9th', '53'] },
-          { text: 'RR 5.2 after 15 overs. Want overall 6 after 20. Required run rate next 5?', sample: 'Runs now 78; need 120; next 5 need 42 ⇒ 42/5=8.4.', keywords: ['run rate', 'overs', '5.2', '6.0', '8.4'] }
-        ]
-      },
-      8: {
-        easy: [
-          { text: 'Team score S is 25 less than 3×75. Find S.', sample: 'S=3×75−25=200.', keywords: ['200', '75', '3×75', '25'] },
-          { text: 'Scores: 30, x, 45. Avg=40. Find x.', sample: '40×3=120; 30+x+45=120 ⇒ x=45.', keywords: ['average', '120', 'x=45'] }
-        ],
-        moderate: [
-          { text: 'P and Q took 15 wickets. P=2Q−3. Find (P,Q).', sample: 'q+(2q−3)=15 ⇒ q=6, P=9.', keywords: ['wickets', '2q−3', '15', '6', '9'] },
-          { text: 'Avg n matches=180. Next score 220 makes avg 185. Find total matches now.', sample: '(180n+220)/(n+1)=185 ⇒ n=7 ⇒ total 8.', keywords: ['average', '180', '220', '185', 'n=7', '8'] }
-        ],
-        hard: [
-          { text: 'X+Y=75; and 2X+(Y−5)=120. Find (X,Y).', sample: '2x+y=125 with x+y=75 ⇒ x=50 ⇒ y=25.', keywords: ['system', '75', '120', '50', '25'] },
-          { text: 'Revised: Avg 24 after w wickets. Next 5 wickets cost 150 runs. New avg 25. Find w.', sample: '24w+150=25(w+5) ⇒ w=25.', keywords: ['average', '24', '25', '150', 'w=25'] }
-        ]
-      },
-      9: {
-        easy: [
-          { text: 'Team runs 5x+10=110. Find x.', sample: '5x=100 ⇒ x=20.', keywords: ['linear', '110', 'x=20'] },
-          { text: 'Scores S, S+5, 2S total 115. Find S.', sample: '4S+5=115 ⇒ S=27.5.', keywords: ['sum', '115', '27.5'] }
-        ],
-        moderate: [
-          { text: 'x+y=120 and 2x−y=90. Find (x,y).', sample: 'Add ⇒ 3x=210 ⇒ x=70, y=50.', keywords: ['system', '120', '90', '70', '50'] },
-          { text: 'R(n)=n²−10n+30. Find minimum runs.', sample: 'Vertex at n=5 ⇒ R(5)=5.', keywords: ['parabola', 'vertex', '5'] }
-        ],
-        hard: [
-          { text: 'A,B,C in AP. B=60, total 180, and (A·C)=3500. Find (A,B,C).', sample: '(60−d)(60+d)=3500 ⇒ d=10 ⇒ (50,60,70).', keywords: ['AP', 'product', '3500', '50', '60', '70'] },
-          { text: 'Avg 55 over two scores x,y; and x=2y−10. Find (x,y).', sample: 'x+y=110; 2y−10+y=110 ⇒ y=40, x=70.', keywords: ['average', '55', '70', '40'] }
-        ]
-      },
-      10: {
-        easy: [
-          { text: 'W(n)=2n+5. How many wickets in 10th match?', sample: 'W(10)=25.', keywords: ['function', 'W(10)=25'] },
-          { text: 'R(x)=5x²+1000. Runs after 10 years?', sample: 'R(10)=1500.', keywords: ['quadratic', '1500'] }
-        ],
-        moderate: [
-          { text: 'Scores form GP: a=20, r=1.5. 3rd score?', sample: 'ar²=20·(1.5)²=45.', keywords: ['GP', '20', '1.5', '45'] },
-          { text: 'R(t)=6e^{0.2t}. Runs after 5 min?', sample: '≈16.', keywords: ['exponential', 'e', '16'] }
-        ],
-        hard: [
-          { text: 'f(x)=x²−3x+5, g(x)=2x−1. When equal?', sample: 'x²−5x+6=0 ⇒ x=2,3.', keywords: ['quadratic', 'intersection', '2', '3'] },
-          { text: 'Career runs grow 15%/yr from 5000. Years to exceed 20000?', sample: '(1.15)^t>4 ⇒ t≈9.9 ⇒ ~10 yrs.', keywords: ['exponential', '15%', '10'] }
-        ]
-      }
-    },
-
-    /* Basketball Algebra */
-    basketball: {
-      7: {
-        easy: [{ text: 'Only 2s and 3s: total points 17, total makes 7. Find one solution (x twos, y threes).', sample: '2x+3y=17, x+y=7 ⇒ y=3, x=4.', keywords: ['2x+3y', 'system', '17', '7', 'x=4', 'y=3'] }],
-        moderate: [{ text: 'FT record 18/25. To reach 80% after x perfect attempts, find x.', sample: '(18+x)/(25+x)≥0.8 ⇒ x≥20.', keywords: ['free throw', 'percentage', '80%', 'x=20'] }],
-        hard: [{ text: 'Avg 62 over 8 games. Next two both p to get avg ≥ 68. Find min p.', sample: '(496+2p)/10 ≥ 68 ⇒ p ≥ 92.', keywords: ['average', 'inequality', '92'] }]
-      },
-      8: {
-        easy: [{ text: 'Scores 12, x, 21. Avg=18. Find x.', sample: '54 total ⇒ x=21.', keywords: ['average', '54', 'x=21'] }],
-        moderate: [{ text: '96 points with 40 makes (2s/3s). How many of each?', sample: '2x+3y=96, x+y=40 ⇒ y=16, x=24.', keywords: ['system', '96', '40', '24', '16'] }],
-        hard: [{ text: '2pt:30/40, 3pt:8/20. Make x more 3s (all) for 60% overall. Find x.', sample: '(38+x)/(60+x)=0.6 ⇒ x=2.', keywords: ['percentage', 'overall', 'x=2'] }]
-      },
-      9: {
-        easy: [{ text: 'Points P(n)=4n+6 after n makes. If P=46, find n.', sample: 'n=10.', keywords: ['linear', 'n=10'] }],
-        moderate: [{ text: 'x+y=55 and 3x−y=35. Find (x,y).', sample: 'x=22.5, y=32.5.', keywords: ['system', '22.5', '32.5'] }],
-        hard: [{ text: 'Q(t)=−t²+14t+20. Find maximum and time.', sample: 't=7, Q(7)=69.', keywords: ['vertex', 'max', 't=7', '69'] }]
-      },
-      10: {
-        easy: [{ text: 'Rebounds R(n)=3n+5. Find R(12).', sample: '41.', keywords: ['function', '41'] }],
-        moderate: [{ text: '3PA GP with a=6, r=1.25. 4th game attempts?', sample: '≈11.7.', keywords: ['GP', '1.25'] }],
-        hard: [{ text: 'f(x)=x²−8x+18 equals g(x)=2x+1. Solve.', sample: 'x²−10x+17=0 ⇒ x=5±√8.', keywords: ['quadratic', 'intersection'] }]
-      }
-    },
-
-    /* Football (American) Algebra */
-    football: {
-      7: {
-        easy: [{ text: '2 TD (6) and some FGs (3) total 27. How many FGs?', sample: '12+3f=27 ⇒ f=5.', keywords: ['touchdown', 'field goal', '27', 'f=5'] }],
-        moderate: [{ text: 'Rushing yards 12, 9, x, 7 average 10. Find x.', sample: 'Total 40 ⇒ x=12.', keywords: ['average', 'x=12'] }],
-        hard: [{ text: 'Kicker 18/22. After x perfect, reach ≥90%. Find x.', sample: '(18+x)/(22+x)≥0.9 ⇒ x≥5.', keywords: ['percentage', 'x=5'] }]
-      },
-      8: {
-        easy: [{ text: 'Drive gained 8 each for 4 downs. Total?', sample: '32 yards.', keywords: ['linear', '32'] }],
-        moderate: [{ text: 'x+y=150 and x−y=30 yards. Find (x,y).', sample: 'x=90, y=60.', keywords: ['system', '90', '60'] }],
-        hard: [{ text: 'QB 96/150. After x perfect, reach 70%. Find x.', sample: '(96+x)/(150+x)=0.7 ⇒ x=30.', keywords: ['percentage', 'x=30'] }]
-      },
-      9: {
-        easy: [{ text: 'S=7n+3k with n TD (PAT) and k FG. Give integer pair for 31.', sample: 'n=4,k=1 works (28+3).', keywords: ['expression', '31', 'integer'] }],
-        moderate: [{ text: 'Y(t)=−2t²+20t+5. When is max and value?', sample: 't=5, Y=55.', keywords: ['vertex', 't=5', '55'] }],
-        hard: [{ text: 'Revenue: R=12x+8(1000−x). Max where?', sample: 'Linear ↑ ⇒ boundary x=1000.', keywords: ['optimization', 'boundary'] }]
-      },
-      10: {
-        easy: [{ text: 'G(n)=5n+40. Find G(12).', sample: '100.', keywords: ['function', '100'] }],
-        moderate: [{ text: 'K(t)=60e^{-0.03t}. Distance at t=10?', sample: '≈44.4.', keywords: ['exponential', '44.4'] }],
-        hard: [{ text: 'x²−6x+10 = 3x−2. Solve.', sample: 'x=3 or 4.', keywords: ['quadratic', '3', '4'] }]
-      }
-    }
+/* -------------------------------------------------------------------------- */
+/* 0) Tiny “LLM” prompt bank (JSON in-code; no DB, no APIs)                   */
+/* -------------------------------------------------------------------------- */
+const TOY_LLM = {
+  names: ["Rahul", "Aisha", "Maya", "Arjun", "Sam", "Liam", "Zara", "Ishan", "Neha", "Kiran", "Aarav", "Anya"],
+  coaches: ["Coach Vector", "Captain Fraction", "Professor Pi", "Sir Integrator", "Ms. Matrix"],
+  wrappers: {
+    intros: [
+      "{emoji} {coach}: Pssst, quick challenge for {name}!",
+      "{emoji} Mission time! Help {name} calculate this before the snack timer beeps.",
+      "{emoji} Math Quest: {name} needs you on the stats squad.",
+      "{emoji} Brain Bat! {name} steps up with a puzzle."
+    ],
+    closers: [
+      "No calculators, just superstar brain cells ⭐",
+      "Finish it and do a tiny victory dance 🕺",
+      "If stuck, poke the <em>Show Sample Answer</em> button!",
+      "Bonus point if you explain it to a rubber duck 🦆"
+    ]
   },
-
-  /* Calculus (Tennis G10) */
-  calculus: {
-    tennis: {
-      10: {
-        easy: [
-          { text: 'h(t)=−16t²+60t+5 ft. Initial height?', sample: 'h(0)=5 ft.', keywords: ['initial', '5'] },
-          { text: 'v(t)=40−8t ft/s. Acceleration?', sample: 'v\'(t)=−8 ft/s².', keywords: ['acceleration', '-8'] }
-        ],
-        moderate: [
-          { text: 's(t)=t³−6t²+9t. When is velocity zero?', sample: 'v=3t²−12t+9=0 ⇒ t=1,3.', keywords: ['derivative', 'zeros'] },
-          { text: 'S\'(t)=2t+5, S(0)=10. Find S(3).', sample: 'S=t²+5t+10 ⇒ 34.', keywords: ['integral', '34'] }
-        ],
-        hard: [
-          { text: 'h(t)=−5t²+25t+1 m. Avg height on [0,2]?', sample: '(1/2)∫₀² h dt = 58/3 ≈ 19.33 m.', keywords: ['average value', '19.33'] },
-          { text: 'v(t)=100e^{−0.05t} mph. Find v\'(10).', sample: '−5e^{−0.5}≈−3.03.', keywords: ['derivative', '-3.03'] }
-        ]
-      }
-    }
+  sports: {
+    cricket: { emoji: "🏏", noun: "runs", move: "straight drive" },
+    football: { emoji: "🏈", noun: "yards", move: "touchdown" },
+    soccer: { emoji: "⚽", noun: "goals", move: "nutmeg" },
+    basketball: { emoji: "🏀", noun: "points", move: "crossover" },
+    tennis: { emoji: "🎾", noun: "points", move: "topspin" }
   },
-
-  /* Geometry (Soccer G8) */
-  geometry: {
-    soccer: {
-      8: {
-        easy: [
-          { text: 'Field 100 m × 60 m. Area?', sample: 'A=6000 m².', keywords: ['area', '6000'] },
-          { text: 'Center circle diameter 20 yd. Radius & circumference?', sample: 'r=10 yd; C≈62.8 yd.', keywords: ['circle', 'radius', '62.8'] }
-        ],
-        moderate: [
-          { text: 'Penalty box 44×18 yd. Diagonal distance?', sample: '√2260≈47.5 yd.', keywords: ['pythagoras', '47.5'] },
-          { text: 'Penalty 44×18; goal 20×6. Area outside?', sample: '792−120=672 yd².', keywords: ['area difference', '672'] }
-        ],
-        hard: [
-          { text: 'Perimeter 360 m; length = width+30. Dimensions?', sample: 'w=75, l=105.', keywords: ['perimeter', '105', '75'] },
-          { text: 'Corner→center→midpoint opposite sideline on 100×60. Total distance?', sample: '≈108.31 m.', keywords: ['distance', '108.31'] }
-        ]
-      }
+  // Topic-specific idea “cards” (the generator picks and fills numbers)
+  cards: {
+    algebra: {
+      easy: [
+        { kind: "linear_bonus", text: "{name} earns {a} {noun} per success plus a bonus {b} {noun}. Today the total is {T} {noun}. How many successes x did {name} make?" },
+        { kind: "average_3", text: "{name} scored {s1}, {s2}, and wants an average of {avg} over 3 games. How many {noun} in game 3? (Let r be the answer.)" }
+      ],
+      moderate: [
+        { kind: "system_sum", text: "A team made {m} shots: some worth 2 {noun}, some 3 {noun}. Total {sum} {noun}. How many of each?" },
+        { kind: "target_avg4", text: "After {g1}, {g2}, {g3} {noun}, {name} wants average {avg} over 4 games. How many in game 4?" }
+      ],
+      hard: [
+        { kind: "raise_pct", text: "So far {name} is {made}/{att} on attempts. How many perfect attempts x next game to reach {target}%?" }
+      ]
+    },
+    calculus: {
+      easy: [
+        { kind: "derivative_quad", text: "A {sport} ball tracks f(t)={m}t²+{b}t. Find f'(t). What rule is this?" },
+        { kind: "area_linear", text: "Acceleration a(t)={k}t+{c}. Compute ∫₀¹ a(t) dt (change in speed during a 1-s burst)." }
+      ],
+      moderate: [
+        { kind: "product", text: "f(t)=(t²+{c})e^t. Differentiate using the product rule." },
+        { kind: "chain", text: "g(t)=({a}t²+1)³. Find g'(t) using the chain rule." }
+      ],
+      hard: [
+        { kind: "opt_perim", text: "A rectangular {sport} zone has fixed perimeter {P} m. What dimensions maximize area? (Calc or AM-GM.)" }
+      ]
+    },
+    geometry: {
+      easy: [
+        { kind: "rect_pa", text: "A mini {sport} court has length {L} m and width {W} m. Find its perimeter and area." }
+      ],
+      moderate: [
+        { kind: "pythag", text: "A {sport} drill makes a right triangle path with legs {a} and {b}. Find the hypotenuse." }
+      ],
+      hard: [
+        { kind: "similar_scale", text: "Scale a triangular {sport} marker by {s}:1. Original base {base}, height {height}. What are the scaled dimensions?" }
+      ]
+    },
+    trigonometry: {
+      easy: [
+        { kind: "ramp_ratios", text: "A {sport} ramp rises {opp} over a run of {adj}. Compute sinθ, cosθ, tanθ." }
+      ],
+      moderate: [
+        { kind: "angle_elev", text: "From {d} m away, a {sport} coach looks up {h} m. Find the angle of elevation (°)." }
+      ],
+      hard: [
+        { kind: "solve_sin", text: "Solve 0°≤x<360°: 2sin x = √3 (visualize a {sport} serve arc)." }
+      ]
+    },
+    probability: {
+      easy: [
+        { kind: "coin", text: "A coin toss decides who starts a {sport} game. Probability of two heads in a row?" }
+      ],
+      moderate: [
+        { kind: "perm", text: "From {n} {sport} players, how many ways to choose captain & vice-captain (order matters)?" }
+      ],
+      hard: [
+        { kind: "binom_ev", text: "Each {sport} attempt succeeds with p={p}. In {trials} attempts, what’s the expected number of successes?" }
+      ]
     }
   }
 };
 
-function getCurated(area, sport, grade, level) {
-  const a = (area || '').toLowerCase();
-  const s = (sport || '').toLowerCase();
-  const g = String(+grade || 0);
-  return (((CURATED[a] || {})[s] || {})[g] || {})[(level || '').toLowerCase()] || [];
+/* -------------------------------------------------------------------------- */
+/* 1) Helpers                                                                  */
+/* -------------------------------------------------------------------------- */
+const SPORTS = Object.keys(TOY_LLM.sports);
+function validSport(s) { return SPORTS.includes((s || '').toLowerCase()); }
+function sportOrDefault(s) { return s ? (validSport(s) ? s.toLowerCase() : '') : ''; }
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const cap = (s) => s ? s[0].toUpperCase() + s.slice(1) : s;
+
+/* Build fun wrapper line */
+function wrapWithHumor(sportKey, name) {
+  const sport = TOY_LLM.sports[sportKey] || { emoji: "🧠" };
+  const coach = pick(TOY_LLM.coaches);
+  const intro = pick(TOY_LLM.wrappers.intros)
+    .replace("{emoji}", sport.emoji)
+    .replace("{coach}", coach)
+    .replace("{name}", name);
+  const closer = pick(TOY_LLM.wrappers.closers);
+  return { intro, closer };
 }
 
-/* ------------------ Generators (fallback to reach 3) ------------------ */
-function genAlgebra(level, grade, sport, count = 3) {
-  const S = sportOrDefault(sport) || 'sport';
-  const noun = (sp => {
-    const s = (sp || '').toLowerCase();
-    if (s === 'cricket') return 'runs';
-    if (s === 'football') return 'yards';
-    if (s === 'soccer') return 'goals';
-    if (s === 'basketball' || s === 'tennis') return 'points';
-    return 'points';
-  })(S);
-  const out = []; const names = ['Rahul', 'Aisha', 'Maya', 'Arjun', 'Sam', 'Liam', 'Zara', 'Ishan'];
-  for (let i = 1; i <= count; i++) {
-    const name = names[i % names.length];
-    if (level === 'easy') {
-      const a = 2 + (i % 4), b = 3 + (i % 3), x = 4 + (i % 5);
-      const total = a * x + b;
-      out.push({
-        tag: 'Algebra',
-        text: `${name} practices ${S}. Each success earns ${a} ${noun} plus ${b} bonus ${noun}. If total is ${total}, how many successes x?`,
-        sample: `${a}x+${b}=${total} ⇒ x=${(total - b) / a}.`,
-        keywords: ['linear', String(a), String(b), String(total)]
-      });
-    } else if (level === 'moderate') {
-      const s1 = 10 + (i % 5), s2 = 8 + (i % 4), s3 = 12 + (i % 6), target = 12 + (+grade % 5);
-      const totalNeeded = target * 4, sum = s1 + s2 + s3, need = totalNeeded - sum;
-      out.push({
-        tag: 'Algebra',
-        text: `${name} loves ${S}: ${s1}, ${s2}, ${s3} ${noun}. Aim avg ${target} over 4. How many in game 4?`,
-        sample: `Need ${totalNeeded} total; have ${sum} ⇒ ${need}.`,
-        keywords: ['average', String(target), String(need)]
-      });
-    } else {
-      const made = 10 + (i % 5), total = 18 + (i % 6), target = 70 + (+grade % 3) * 5, p = target / 100;
-      const x = Math.max(0, Math.ceil((p * total - made) / (1 - p)));
-      out.push({
-        tag: 'Algebra',
-        text: `${name}'s ${S} success rate is ${made}/${total}. Perfect next x to reach ${target}%?`,
-        sample: `(made+x)/(total+x) ≥ ${target}/100 ⇒ x≥${x}.`,
-        keywords: ['percentage', String(target), String(x)]
-      });
+/* MCQ helpers */
+function buildChoices(correct, isNumber = true) {
+  const opts = new Set([String(correct)]);
+  const base = typeof correct === "number" ? correct : parseFloat(correct);
+  if (isFinite(base)) {
+    for (let d of [-2, -1, 1, 2, 3, -3]) {
+      if (opts.size >= 4) break;
+      opts.add(String(base + d));
     }
   }
-  return out;
-}
-function genCalculus(level, grade, sport, count = 3) {
-  const S = sportOrDefault(sport) || 'sport'; const out = [];
-  for (let i = 1; i <= count; i++) {
-    if (level === 'easy') {
-      const m = 2 + i, b = 3 + i;
-      out.push({
-        tag: 'Calculus', text: `In ${S}, position p(t)=${m}t²+${b}t. Find p'(t).`,
-        sample: `p'(t)=${2 * m}t+${b}.`, keywords: ['derivative', 'power rule']
-      });
-    } else if (level === 'moderate') {
-      out.push({
-        tag: 'Calculus', text: `Training load g(t)=(2t²+1)³. Find g'(t).`,
-        sample: `g'(t)=12t(2t²+1)².`, keywords: ['chain rule']
-      });
-    } else {
-      const P = 40 + 2 * (+grade || 0);
-      out.push({
-        tag: 'Calculus', text: `A rectangular ${S} area has fixed perimeter ${P}. Which dims maximize area?`,
-        sample: `Square ⇒ L=W=${P / 4}.`, keywords: ['optimize', 'perimeter']
-      });
-    }
-  }
-  return out;
-}
-function genGeometry(level, grade, sport, count = 3) {
-  const S = sportOrDefault(sport) || 'sport', out = [];
-  for (let i = 1; i <= count; i++) {
-    if (level === 'easy') {
-      const L = 20 + i, W = 10 + (i % 3);
-      out.push({
-        tag: 'Geometry', text: `Design a ${S} mini-court L=${L}, W=${W}. Perimeter & area?`,
-        sample: `2(L+W)=${2 * (L + W)}, L·W=${L * W}.`, keywords: ['perimeter', 'area']
-      });
-    } else if (level === 'moderate') {
-      const a = 6 + i % 3, b = 8 + i % 2;
-      out.push({
-        tag: 'Geometry', text: `A ${S} drill uses a right triangle with legs ${a} and ${b}. Find c.`,
-        sample: `c=√(${a}²+${b}²)=${Math.hypot(a, b).toFixed(2)}.`, keywords: ['pythagoras', 'hypotenuse']
-      });
-    } else {
-      out.push({
-        tag: 'Geometry', text: `Scale a ${S} field by 2:1. Triangle base 12, height 8. Scaled dims?`,
-        sample: `Base 24, height 16.`, keywords: ['similarity', 'scale']
-      });
-    }
-  }
-  return out;
-}
-function genTrigonometry(level, grade, sport, count = 3) {
-  const S = sportOrDefault(sport) || 'sport', out = [];
-  for (let i = 1; i <= count; i++) {
-    if (level === 'easy') {
-      const opp = 3 + i % 2, adj = 4 + i % 3, hyp = Math.hypot(opp, adj).toFixed(2);
-      out.push({
-        tag: 'Trigonometry', text: `A ${S} ramp rises ${opp} over ${adj}. Find sin, cos, tan.`,
-        sample: `sin=${opp}/${hyp}, cos=${adj}/${hyp}, tan=${opp}/${adj}.`, keywords: ['sin', 'cos', 'tan']
-      });
-    } else if (level === 'moderate') {
-      const h = 10 + i % 3, d = 15 + i % 4;
-      out.push({
-        tag: 'Trigonometry', text: `From ${d} m away, a ${S} coach looks up ${h} m. Angle of elevation?`,
-        sample: `tanθ=h/d ⇒ θ≈${(Math.atan(h / d) * 180 / Math.PI).toFixed(1)}°.`, keywords: ['angle', 'tan']
-      });
-    } else {
-      out.push({
-        tag: 'Trigonometry', text: `Solve 0°≤x<360°: 2sin x = √3 (in a ${S} drill).`,
-        sample: `sin x=√3/2 ⇒ x=60°,120°.`, keywords: ['solve', 'sin']
-      });
-    }
-  }
-  return out;
-}
-function genProbability(level, grade, sport, count = 3) {
-  const S = sportOrDefault(sport) || 'sport', out = [];
-  for (let i = 1; i <= count; i++) {
-    if (level === 'easy') {
-      out.push({
-        tag: 'Probability', text: `A coin decides who starts a ${S} game. P(two heads in a row)?`,
-        sample: `1/2 × 1/2 = 1/4.`, keywords: ['independent', '1/4']
-      });
-    } else if (level === 'moderate') {
-      const n = 6 + i % 3;
-      out.push({
-        tag: 'Probability', text: `From ${n} ${S} players, ways to choose captain & vice (order matters)?`,
-        sample: `P(${n},2)=${n * (n - 1)}.`, keywords: ['permutation']
-      });
-    } else {
-      const p = 0.6, trials = 10;
-      out.push({
-        tag: 'Probability', text: `Success prob p=${p} per ${S} attempt. Expected successes in ${trials}?`,
-        sample: `E=np=${trials * p}.`, keywords: ['binomial', 'expected value']
-      });
-    }
-  }
-  return out;
-}
-function pickGenerator(area) {
-  switch (area) {
-    case 'algebra': return genAlgebra;
-    case 'calculus': return genCalculus;
-    case 'geometry': return genGeometry;
-    case 'trigonometry': return genTrigonometry;
-    case 'probability': return genProbability;
-    default: return null;
-  }
+  while (opts.size < 4) { opts.add(String(Math.floor(Math.random() * 9) + 1)); }
+  const arr = Array.from(opts);
+  // shuffle
+  for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[arr[i], arr[j]] = [arr[j], arr[i]]; }
+  return arr;
 }
 
-/* ------------------ Build 3 Qs: curated first, then fill ------------------ */
-function makeQuestions(area, hobby, level, grade) {
-  const COUNT = 3;
+/* -------------------------------------------------------------------------- */
+/* 2) Tiny generator (“toy-LLM”)                                               */
+/* -------------------------------------------------------------------------- */
+
+function llmGenerate({ area, level, grade, sport: sportKey }) {
+  const name = pick(TOY_LLM.names);
+  const sport = TOY_LLM.sports[sportKey] || { emoji: "🧠", noun: "points", move: "move" };
+  const { intro, closer } = wrapWithHumor(sportKey, name);
+
+  const cards = TOY_LLM.cards[area]?.[level];
+  if (!cards || !cards.length) return null;
+  const card = pick(cards);
+
+  const g = Math.max(7, Math.min(10, +grade || 7));
+  let text = "", sample = "", correct = null, keywords = [];
+
+  switch (card.kind) {
+    // ---------- Algebra ----------
+    case "linear_bonus": {
+      const a = 2 + (g % 3);
+      const b = 3 + (g % 2);
+      const x = 3 + Math.floor(Math.random() * 5);
+      const T = a * x + b;
+      text = card.text
+        .replace("{name}", name).replaceAll("{a}", a).replaceAll("{b}", b)
+        .replaceAll("{T}", T).replaceAll("{noun}", sport.noun);
+      sample = `Model: ${a}x + ${b} = ${T}. Subtract ${b} ⇒ ${a}x = ${T - b}. Divide by ${a} ⇒ x = ${(T - b) / a}. ${closer}`;
+      correct = (T - b) / a; keywords = ["linear", "equation", String(a), String(b), String(T)];
+      break;
+    }
+    case "average_3": {
+      const s1 = 10 + g, s2 = 8 + Math.floor(Math.random() * 6);
+      const avg = 15 + (g % 4);
+      const total = avg * 3, r = total - (s1 + s2);
+      text = card.text.replace("{name}", name).replace("{s1}", s1).replace("{s2}", s2)
+        .replace("{avg}", avg).replaceAll("{noun}", sport.noun);
+      sample = `Total needed = ${avg}×3 = ${total}. So far = ${s1}+${s2}. Need r = ${r}. ${closer}`;
+      correct = r; keywords = ["average", String(avg), String(total)];
+      break;
+    }
+    case "system_sum": {
+      const m = 30 + (g % 8);
+      // choose a consistent solution, then back-compute sum
+      const y3 = 10 + (g % 5);
+      const y2 = m - y3;
+      const sum = 2 * y2 + 3 * y3;
+      text = card.text.replace("{m}", m).replace("{sum}", sum).replaceAll("{noun}", sport.noun);
+      sample = `Let x=2-pointers, y=3-pointers. x+y=${m}; 2x+3y=${sum}. Solve ⇒ y=${y3}, x=${y2}. ${closer}`;
+      correct = `${y2} twos & ${y3} threes`; keywords = ["system", "2x+3y", String(sum), String(m)];
+      break;
+    }
+    case "target_avg4": {
+      const g1 = 12 + (g % 5), g2 = 9 + (g % 4), g3 = 15 + (g % 6);
+      const avg = 12 + (g % 5);
+      const need = avg * 4 - (g1 + g2 + g3);
+      text = card.text.replace("{g1}", g1).replace("{g2}", g2).replace("{g3}", g3)
+        .replace("{avg}", avg).replaceAll("{noun}", sport.noun).replace("{name}", name);
+      sample = `Need ${avg}×4=${avg * 4}. Have ${g1}+${g2}+${g3}=${g1 + g2 + g3}. Game 4 = ${need}. ${closer}`;
+      correct = need; keywords = ["average", String(avg)];
+      break;
+    }
+    case "raise_pct": {
+      const made = 10 + (g % 6), att = 15 + (g % 7), target = 70 + (g % 4) * 5;
+      const p = target / 100;
+      const x = Math.max(0, Math.ceil((p * att - made) / (1 - p)));
+      text = card.text.replace("{name}", name).replace("{made}", made).replace("{att}", att)
+        .replace("{target}", target);
+      sample = `(m+x)/(a+x) ≥ ${target}/100. Solve ⇒ x ≥ ${x}. ${closer}`;
+      correct = x; keywords = ["percentage", String(target)];
+      break;
+    }
+
+    // ---------- Calculus ----------
+    case "derivative_quad": {
+      const m = 2 + (g % 6), b = 3 + (g % 4);
+      text = card.text.replace("{m}", m).replace("{b}", b).replace("{sport}", sportKey || "sport");
+      sample = `Power rule ⇒ f'(t)=${2 * m}t+${b}. ${closer}`;
+      correct = `${2 * m}t + ${b}`; keywords = ["derivative", "power rule"];
+      break;
+    }
+    case "area_linear": {
+      const k = 2 + (g % 4), c = 1 + (g % 3);
+      const val = k / 2 + c;
+      text = card.text.replace("{k}", k).replace("{c}", c);
+      sample = `∫₀¹ (${k}t+${c}) dt = [${k / 2}t² + ${c}t]₀¹ = ${val}. ${closer}`;
+      correct = val; keywords = ["integral", "definite"];
+      break;
+    }
+    case "product": {
+      const c = 1 + (g % 5);
+      text = card.text.replace("{c}", c);
+      sample = `f'=(2t)e^t + (t²+${c})e^t = (2t + t² + ${c})e^t. ${closer}`;
+      correct = "(2t + t² + c)e^t"; keywords = ["product rule"];
+      break;
+    }
+    case "chain": {
+      const a = 2 + (g % 3);
+      text = card.text.replace("{a}", a);
+      sample = `g'=3(${a}t²+1)²·(2${a}t) = ${6 * a}t(${a}t²+1)². ${closer}`;
+      correct = `${6 * a}t(${a}t²+1)²`; keywords = ["chain rule"];
+      break;
+    }
+    case "opt_perim": {
+      // UPDATED: add randomness so {P} is truly “generated”
+      const P = 40 + 2 * g + 2 * Math.floor(Math.random() * 6); // 40+ .. 50+ depending on grade
+      text = card.text.replace("{P}", P).replace("{sport}", sportKey || "sport");
+      sample = `Max area at square ⇒ L=W=${P / 4}. Use derivative or AM-GM. ${closer}`;
+      correct = P / 4; keywords = ["optimize", "perimeter"];
+      break;
+    }
+
+    // ---------- Geometry ----------
+    case "rect_pa": {
+      const L = 12 + g + Math.floor(Math.random() * 3);
+      const W = 6 + (g % 5) + Math.floor(Math.random() * 2);
+      text = card.text.replace("{L}", L).replace("{W}", W).replace("{sport}", sportKey || "sport");
+      sample = `Perimeter 2(L+W)=${2 * (L + W)}; Area L·W=${L * W}. ${closer}`;
+      correct = `${2 * (L + W)} & ${L * W}`; keywords = ["perimeter", "area"];
+      break;
+    }
+    case "pythag": {
+      const a = 6 + (g % 3), b = 8 + (g % 4);
+      const c = Math.hypot(a, b).toFixed(2);
+      text = card.text.replace("{a}", a).replace("{b}", b).replace("{sport}", sportKey || "sport");
+      sample = `c=√(${a}²+${b}²)=${c}. ${closer}`;
+      correct = parseFloat(c); keywords = ["pythagoras", "hypotenuse"];
+      break;
+    }
+    case "similar_scale": {
+      const s = 2 + (g % 2), base = 10 + g, height = 7 + (g % 5);
+      text = card.text.replace("{s}", s).replace("{base}", base).replace("{height}", height).replace("{sport}", sportKey || "sport");
+      sample = `Scaled base=${base * s}, height=${height * s}. ${closer}`;
+      correct = `${base * s} & ${height * s}`; keywords = ["similar", "scale"];
+      break;
+    }
+
+    // ---------- Trig ----------
+    case "ramp_ratios": {
+      const opp = 3 + (g % 3), adj = 4 + (g % 4), hyp = Math.hypot(opp, adj).toFixed(2);
+      text = card.text.replace("{opp}", opp).replace("{adj}", adj).replace("{sport}", sportKey || "sport");
+      sample = `sinθ=${opp}/${hyp}, cosθ=${adj}/${hyp}, tanθ=${opp}/${adj}. ${closer}`;
+      correct = `sin=${(opp / hyp).toFixed(2)}`; keywords = ["sin", "cos", "tan"];
+      break;
+    }
+    case "angle_elev": {
+      const h = 10 + (g % 5), d = 15 + (g % 4);
+      const angle = (Math.atan(h / d) * 180 / Math.PI).toFixed(1);
+      text = card.text.replace("{h}", h).replace("{d}", d).replace("{sport}", sportKey || "sport");
+      sample = `tanθ=h/d=${h}/${d} ⇒ θ≈${angle}°. ${closer}`;
+      correct = parseFloat(angle); keywords = ["angle", "tan"];
+      break;
+    }
+    case "solve_sin": {
+      text = card.text.replace("{sport}", sportKey || "sport");
+      sample = `sin x=√3/2 ⇒ x=60°,120°. ${closer}`;
+      correct = "60°, 120°"; keywords = ["solve", "sin"];
+      break;
+    }
+
+    // ---------- Probability ----------
+    case "coin": {
+      text = card.text.replace("{sport}", sportKey || "sport");
+      sample = `Independent tosses ⇒ 1/2 × 1/2 = 1/4. ${closer}`;
+      correct = 0.25; keywords = ["independent", "1/4", "0.25"];
+      break;
+    }
+    case "perm": {
+      const n = 6 + (g % 5);
+      text = card.text.replace("{n}", n).replace("{sport}", sportKey || "sport");
+      sample = `Order matters ⇒ P(${n},2)=${n}×(${n - 1})=${n * (n - 1)}. ${closer}`;
+      correct = n * (n - 1); keywords = ["permutation", String(n)];
+      break;
+    }
+    case "binom_ev": {
+      const p = 0.5 + (g % 3) * 0.1; const trials = 10;
+      text = card.text.replace("{p}", p.toFixed(1)).replace("{trials}", trials).replace("{sport}", sportKey || "sport");
+      sample = `E=np=${trials}×${p.toFixed(1)}=${(trials * p).toFixed(1)}. ${closer}`;
+      correct = parseFloat((trials * p).toFixed(1)); keywords = ["binomial", "expected"];
+      break;
+    }
+  }
+
+  // Build MCQ sometimes (50% chance) if correct is numeric
+  let choices = null;
+  if (typeof correct === "number" && Math.random() < 0.5) {
+    choices = buildChoices(correct, true);
+  }
+
+  const funnyLead = `${intro}<br><br>`;
+  return {
+    tag: cap(area),
+    // FIXED: return the **filled** text (was returning unfilled card.text before)
+    text: funnyLead + text,
+    sample,
+    correct,
+    choices,
+    keywords: (keywords || []).map(k => String(k).toLowerCase())
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* 3) Backward-compatible makeQuestions                                       */
+/* -------------------------------------------------------------------------- */
+function makeQuestions(area, hobby, level, grade, count = 3) {
   const sport = sportOrDefault(hobby);
-  const curated = sport ? getCurated(area, sport, grade, level) : [];
-  const curatedTagged = curated.map(q => ({ ...q, tag: area[0].toUpperCase() + area.slice(1) }));
-  const need = Math.max(0, COUNT - curatedTagged.length);
-  const gen = pickGenerator(area);
-  const filler = need > 0 && gen ? gen(level, grade, sport, need) : [];
-  return [...curatedTagged, ...filler].slice(0, COUNT).map(q => ({
-    ...q,
-    keywords: (q.keywords || []).map(k => String(k).toLowerCase())
-  }));
+  const list = [];
+  for (let i = 0; i < count; i++) {
+    const topic = (area === 'mix') ? pick(['algebra', 'calculus', 'geometry', 'trigonometry', 'probability']) : area;
+    const q = llmGenerate({ area: topic, level, grade, sport });
+    if (q) list.push(q);
+  }
+  return list.length ? list : [{
+    tag: 'Oops',
+    text: 'Could not generate a question. Try different settings.',
+    sample: 'Change topic/level and try again.',
+    keywords: []
+  }];
 }
 
-/* ------------------ Evaluate ------------------ */
-function evaluateAnswer(answer, keywords) {
-  const a = (answer || '').toLowerCase();
-  const uniq = [...new Set(keywords)];
-  const hits = uniq.filter(k => a.includes(k));
+/* -------------------------------------------------------------------------- */
+/* 4) Evaluation: exact check (if q.correct) + keyword fallback               */
+/* -------------------------------------------------------------------------- */
+function evaluateAnswer(answer, q) {
+  const a = (answer || '').trim();
+  // Exact numeric/string if we know the correct answer
+  if (q && q.correct !== null && q.correct !== undefined) {
+    let ok = false;
+    if (typeof q.correct === 'number') {
+      const num = parseFloat(a.replace(/[^\d.\-]/g, ''));
+      ok = isFinite(num) && Math.abs(num - q.correct) <= 0.05; // small tolerance
+    } else {
+      ok = a.toLowerCase().includes(String(q.correct).toLowerCase());
+    }
+    const score = ok ? 100 : 0;
+    const verdict = ok ? 'Nailedddd! 🏆' : 'Close! Check the hints and try again.';
+    return { score, verdict, missing: ok ? [] : [String(q.correct)] };
+  }
+  // Fallback: keyword scoring
+  const uniq = Array.from(new Set(q.keywords || []));
+  const hits = uniq.filter(k => a.toLowerCase().includes(k));
   const score = Math.round(100 * hits.length / Math.max(1, uniq.length));
-  const missing = uniq.filter(k => !hits.includes(k));
   const verdict = score >= 80 ? 'Excellent — covers most key points.' :
     score >= 60 ? 'Good — add a few details.' :
       score >= 40 ? 'Okay — expand on steps.' :
         'Needs improvement — add definitions, steps, and a check.';
-  return { score, verdict, missing };
+  return { score, verdict, missing: uniq.filter(k => !hits.includes(k)) };
 }
 
-/* ------------------ State + History ------------------ */
+/* -------------------------------------------------------------------------- */
+/* 5) State, history, UI (unchanged + MCQ wiring)                             */
+/* -------------------------------------------------------------------------- */
 let state = { questions: [], idx: 0, meta: { area: '', sport: '', level: '', grade: '' } };
 const STORAGE_KEY = 'mathTrainerHistoryV2';
 function loadHistory() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [] } catch { return [] } }
 function saveHistory(item) { const d = loadHistory(); d.unshift(item); localStorage.setItem(STORAGE_KEY, JSON.stringify(d.slice(0, 150))); }
 function resetHistory() { localStorage.removeItem(STORAGE_KEY); }
 
+function renderChoices(q) {
+  const box = $("choices");
+  box.innerHTML = "";
+  box.hidden = !q.choices || !q.choices.length;
+  if (box.hidden) return;
+
+  q.choices.forEach(text => {
+    const btn = document.createElement('button');
+    btn.className = 'choice';
+    btn.textContent = text;
+    btn.addEventListener('click', () => {
+      $("answer").value = text;
+      const ok = q.correct !== undefined && q.correct !== null &&
+        (typeof q.correct === 'number'
+          ? Math.abs(parseFloat(text) - q.correct) <= 0.05
+          : String(text).toLowerCase() === String(q.correct).toLowerCase());
+      btn.classList.add(ok ? 'correct' : 'wrong');
+      setTimeout(() => { Array.from(box.children).forEach(c => c.classList.remove('correct', 'wrong')); }, 900);
+    });
+    box.appendChild(btn);
+  });
+}
+
 function renderQuestion() {
   if (!state.questions.length) {
     $("problem").innerHTML = 'No question yet. Choose an area and click <em>Generate Questions</em>.';
-    $("q-meta").textContent = '—'; $("status").textContent = ''; $("answer").value = ''; return;
+    $("q-meta").textContent = '—'; $("status").textContent = ''; $("answer").value = ''; $("choices").hidden = true;
+    return;
   }
   const q = state.questions[state.idx];
-  $("problem").textContent = q.text;
+  $("problem").innerHTML = q.text;
   $("q-meta").textContent = `Q${state.idx + 1}/${state.questions.length} · ${q.tag} · ${state.meta.level} · Grade ${state.meta.grade}${state.meta.sport ? ' · ' + state.meta.sport : ''}`;
   $("status").textContent = ''; $("answer").value = '';
+  renderChoices(q);
 }
-
 function updateHistoryUI() {
   const list = $("history-list"); if (!list) return; const data = loadHistory(); list.innerHTML = '';
   data.slice(0, 10).forEach(r => {
     const li = document.createElement('li');
-    const left = document.createElement('span'); left.textContent = `${r.tag} · ${r.level} · G${r.grade}${r.sport ? ' · ' + r.sport : ''} · ${new Date(r.at).toLocaleString()}`;
+    const left = document.createElement('span');
+    left.textContent = `${r.tag} · ${r.level} · G${r.grade}${r.sport ? ' · ' + r.sport : ''} · ${new Date(r.at).toLocaleString()}`;
     const right = document.createElement('strong'); right.textContent = `${r.score}/100`;
     li.appendChild(left); li.appendChild(right); list.appendChild(li);
   });
@@ -379,20 +436,24 @@ function updateHistoryUI() {
   $("attempts").textContent = data.length;
 }
 
-/* ------------------ Bindings ------------------ */
+/* -------------------------------------------------------------------------- */
+/* 6) Bindings                                                                */
+/* -------------------------------------------------------------------------- */
 document.addEventListener('DOMContentLoaded', () => {
   const form = $("generator-form");
   if (form) {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const area = $("topic").value;
-      const sport = $("hobby").value;      // optional
+      const sport = $("hobby").value;     // optional
       const level = $("difficulty").value;
       const grade = $("grade").value;
+      const qty = Math.max(1, Math.min(30, parseInt(($("qty")?.value || '3'), 10) || 3));
       if (!area) { $("topic").reportValidity?.(); return; }
       if (!level) { $("difficulty").reportValidity?.(); return; }
       if (!grade) { $("grade").reportValidity?.(); return; }
-      state.questions = makeQuestions(area, sport, level, grade);
+
+      state.questions = makeQuestions(area, sport, level, grade, qty);
       state.idx = 0; state.meta = { area, sport, level, grade };
       renderQuestion();
     });
@@ -400,7 +461,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   $("btn-clear")?.addEventListener('click', () => {
     $("topic").selectedIndex = 0; $("hobby").selectedIndex = 0; $("difficulty").selectedIndex = 0; $("grade").selectedIndex = 0; $("answer").value = '';
-    state = { questions: [], idx: 0, meta: { area: '', sport: '', level: '', grade: '' } }; renderQuestion();
+    $("qty").value = 3;
+    state = { questions: [], idx: 0, meta: { area: '', sport: '', level: '', grade: '' } };
+    renderQuestion();
   });
 
   $("btn-prev")?.addEventListener('click', () => { if (!state.questions.length) return; state.idx = (state.idx - 1 + state.questions.length) % state.questions.length; renderQuestion(); });
@@ -409,16 +472,26 @@ document.addEventListener('DOMContentLoaded', () => {
   $("btn-eval")?.addEventListener('click', () => {
     if (!state.questions.length) { alert('Generate a question first.'); return; }
     const q = state.questions[state.idx];
-    const { score, verdict, missing } = evaluateAnswer($("answer").value, q.keywords);
-    const missingTxt = missing.length ? ` Missing: <em>${missing.slice(0, 6).join(', ')}</em>` : '';
-    $("status").innerHTML = `<span class="${score >= 60 ? 'ok' : 'bad'}">Score: ${score}/100</span> — ${verdict}.${missingTxt}`;
-    saveHistory({ tag: q.tag, score, at: Date.now(), level: state.meta.level, grade: state.meta.grade, sport: state.meta.sport });
+    const result = evaluateAnswer($("answer").value, q);
+    const missingTxt = result.missing && result.missing.length ? ` Missing: <em>${result.missing.slice(0, 6).join(', ')}</em>` : '';
+    $("status").innerHTML = `<span class="${result.score >= 60 ? 'ok' : 'bad'}">Score: ${result.score}/100</span> — ${result.verdict}.${missingTxt}`;
+    saveHistory({ tag: q.tag, score: result.score, at: Date.now(), level: state.meta.level, grade: state.meta.grade, sport: state.meta.sport });
     updateHistoryUI();
   });
 
-  $("btn-sample")?.addEventListener('click', () => { if (!state.questions.length) return; const q = state.questions[state.idx]; $("status").innerHTML = `<em>Sample outline:</em> ${q.sample}`; });
+  $("btn-sample")?.addEventListener('click', () => {
+    if (!state.questions.length) return;
+    const q = state.questions[state.idx];
+    $("status").innerHTML = `<em>Hints / sample:</em> ${q.sample}`;
+  });
 
-  $("btn-copy")?.addEventListener('click', async () => { if (!state.questions.length) return; try { await navigator.clipboard.writeText(state.questions[state.idx].text); $("status").textContent = 'Question copied to clipboard.'; } catch { $("status").textContent = 'Copy failed. Select and copy manually.'; } });
+  $("btn-copy")?.addEventListener('click', async () => {
+    if (!state.questions.length) return;
+    try {
+      await navigator.clipboard.writeText($("problem").innerText);
+      $("status").textContent = 'Question copied to clipboard.';
+    } catch { $("status").textContent = 'Copy failed. Select and copy manually.'; }
+  });
 
   $("btn-reset")?.addEventListener('click', () => { if (confirm('Reset all saved attempts?')) { resetHistory(); updateHistoryUI(); } });
 

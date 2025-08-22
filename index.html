@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -7,16 +8,15 @@
   <meta name="theme-color" content="#2563eb" />
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
-  <!-- decorative header bar -->
   <div class="top-accent"></div>
 
   <div class="container">
     <header>
       <h1>Math Trainer</h1>
       <p class="lead">
-        Choose a math area (min. 5 topics available), generate a question, write your answer, and get instant feedback.
-        Hobbies are <strong>sports only</strong> for personalization.
+        Choose a math area, a sport (for flavor), challenge level, grade (7–10), and how many questions to make.
       </p>
     </header>
 
@@ -47,6 +47,7 @@
             <option value="basketball">Basketball</option>
             <option value="tennis">Tennis</option>
           </select>
+            <small class="hint">Required</small>
         </div>
 
         <div>
@@ -74,6 +75,11 @@
 
         <div class="spacer"></div>
         <div class="actions">
+          <div class="qty">
+            <label for="qty">Questions</label>
+            <input id="qty" type="number" min="1" max="30" step="1" value="3" />
+          </div>
+
           <button type="submit" id="btn-generate">Generate Questions</button>
           <button type="button" class="ghost" id="btn-clear">Clear</button>
         </div>
@@ -86,7 +92,14 @@
         <strong>Problem</strong>
         <span class="pill" id="q-meta">—</span>
       </div>
-      <div id="problem" class="problem-box">No question yet. Choose an area and click <em>Generate Questions</em>.</div>
+
+      <!-- Question text -->
+      <div id="problem" class="problem-box">
+        No question yet. Choose an area and click <em>Generate Questions</em>.
+      </div>
+
+      <!-- OPTIONAL choices (rendered only for MCQs) -->
+      <div id="choices" class="choices" hidden></div>
 
       <div class="spacer"></div>
       <div class="actions">
@@ -128,10 +141,10 @@
     </section>
   </div>
 
-  <!-- background layers -->
   <div class="bg-grid"></div>
   <div class="bg-math"></div>
 
   <script defer src="script.js"></script>
 </body>
+
 </html>
