@@ -3,21 +3,23 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Math Trainer</title>
-  <meta name="theme-color" content="#2563eb" />
-  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width" />
+  <title>Math Trainer — Fun Mode</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
-  <div class="top-accent"></div>
+  <div class="bg-wrap">
+    <div class="bg-shape s1"></div>
+    <div class="bg-shape s2"></div>
+    <div class="bg-shape s3"></div>
+  </div>
 
   <div class="container">
     <header>
-      <h1>Math Trainer</h1>
-      <p class="lead">
-        Choose a math area, a sport (for flavor), challenge level, grade (7–10), and how many questions to make.
-      </p>
+      <h1>Math Trainer <span class="sparkle">✨</span></h1>
+      <p class="lead">Make custom practice by <strong>topic</strong>, <strong>sport</strong>,
+        <strong>challenge</strong>, and <strong>grade (7–10)</strong>. Fresh, funny questions every time!</p>
     </header>
 
     <!-- Inputs -->
@@ -32,22 +34,22 @@
             <option value="geometry">Geometry</option>
             <option value="trigonometry">Trigonometry</option>
             <option value="probability">Probability</option>
-            <option value="mix">Mix (All topics)</option>
+            <option value="mix">Mix (All Topics)</option>
           </select>
           <small class="hint">Required</small>
         </div>
 
         <div>
-          <label for="hobby">Your sport (optional)</label>
-          <select id="hobby">
-            <option value="" selected>Choose a sport (optional)…</option>
-            <option value="cricket">Cricket</option>
-            <option value="football">Football</option>
-            <option value="soccer">Soccer</option>
-            <option value="basketball">Basketball</option>
-            <option value="tennis">Tennis</option>
+          <label for="hobby">Your sport</label>
+          <select id="hobby" required>
+            <option value="" disabled selected>Select your sport…</option>
+            <option>cricket</option>
+            <option>football</option>
+            <option>soccer</option>
+            <option>basketball</option>
+            <option>tennis</option>
           </select>
-            <small class="hint">Required</small>
+          <small class="hint">Required</small>
         </div>
 
         <div>
@@ -74,15 +76,17 @@
         </div>
 
         <div class="spacer"></div>
-        <div class="actions">
-          <div class="qty">
-            <label for="qty">Questions</label>
-            <input id="qty" type="number" min="1" max="30" step="1" value="3" />
-          </div>
 
-          <button type="submit" id="btn-generate">Generate Questions</button>
+        <div class="actions wrap">
+          <div class="qty-wrap">
+            <label for="qty" class="qty-label"># of questions</label>
+            <input id="qty" type="number" value="3" min="1" max="30" />
+          </div>
+          <button type="submit" id="btn-generate" class="pulse">Generate Questions</button>
           <button type="button" class="ghost" id="btn-clear">Clear</button>
         </div>
+        <small class="hint">Tip: set <strong># of questions = 1</strong> for endless fresh questions with the Next
+          button.</small>
       </form>
     </section>
 
@@ -92,13 +96,9 @@
         <strong>Problem</strong>
         <span class="pill" id="q-meta">—</span>
       </div>
+      <div id="problem" class="problem-box">No question yet. Choose inputs and click <em>Generate Questions</em>.</div>
 
-      <!-- Question text -->
-      <div id="problem" class="problem-box">
-        No question yet. Choose an area and click <em>Generate Questions</em>.
-      </div>
-
-      <!-- OPTIONAL choices (rendered only for MCQs) -->
+      <!-- MCQ choices (shown only when present) -->
       <div id="choices" class="choices" hidden></div>
 
       <div class="spacer"></div>
@@ -140,9 +140,6 @@
       </div>
     </section>
   </div>
-
-  <div class="bg-grid"></div>
-  <div class="bg-math"></div>
 
   <script defer src="script.js"></script>
 </body>
