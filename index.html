@@ -19,7 +19,8 @@
     <header>
       <h1>Math Trainer <span class="sparkle">✨</span></h1>
       <p class="lead">Make custom practice by <strong>topic</strong>, <strong>sport</strong>,
-        <strong>challenge</strong>, and <strong>grade (7–10)</strong>. Fresh, funny questions every time!</p>
+        <strong>challenge</strong>, and <strong>grade (7–10)</strong>. Fresh, funny questions every time!
+      </p>
     </header>
 
     <!-- Inputs -->
@@ -105,6 +106,8 @@
       <div class="actions">
         <button type="button" class="secondary" id="btn-prev">◀ Previous</button>
         <button type="button" class="secondary" id="btn-next">Next ▶</button>
+        <!-- ✨ NEW: AI button -->
+        <button type="button" class="secondary" id="btn-ai">✨ AI Question</button>
         <button type="button" class="ghost" id="btn-copy">Copy Question</button>
       </div>
     </section>
@@ -141,6 +144,8 @@
     </section>
   </div>
 
+  <!-- Load optional LLM helper BEFORE your core script -->
+  <script defer src="llm.js"></script>
   <script defer src="script.js"></script>
 </body>
 

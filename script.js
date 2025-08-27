@@ -18,6 +18,7 @@ const SPORTS = {
 };
 function sportNoun(s) { const k = (s || '').toLowerCase(); return SPORTS[k] ? SPORTS[k].noun : 'points'; }
 function sportField(s) { const k = (s || '').toLowerCase(); return SPORTS[k] ? SPORTS[k].field : 'field'; }
+function sportEmoji(s) { const k = (s || '').toLowerCase(); return SPORTS[k]?.emoji || '🧠'; }
 
 /* --------------------------- persistent “learning” ------------------------ */
 const LEARN_KEY = 'trainerLearnedV3';
@@ -112,6 +113,59 @@ function clearChoicesBox() {
   box.hidden = true;
 }
 
+/* ---------- AI question helpers (optional bridge) ---------- */
+async function aiMakePrompt(meta) {
+  const area = meta.area || 'algebra';
+  const level = meta.level || 'easy';
+  const grade = meta.grade || '8';
+  const sport = (meta.sport || 'basketball').toLowerCase();
+
+  return `Create ONE fun ${area} word problem for grade ${grade} with a ${sport} theme.
+- Difficulty: ${level}.
+- Be playful but clear; 2–4 sentences max.
+- Include concrete numbers so it’s solvable without the answer.
+- Do NOT include the solution, hints, or multiple-choice options.
+- Output ONLY the problem text.`;
+}
+
+async function aiBuildQuestion(meta) {
+  if (!window.LLM || typeof window.LLM.ask !== 'function') {
+    throw new Error('LLM bridge not available. Start it with "npm run groq".');
+  }
+  const prompt = await aiMakePrompt(meta);
+  const reply = (await window.LLM.ask(prompt))?.trim();
+  if (!reply) throw new Error('No AI response (check /api/health and your GROQ_API_KEY).');
+
+  const { intro, closer } = funWrap((meta.sport || '').toLowerCase());
+  const emoji = sportEmoji(meta.sport);
+
+  return {
+    tag: 'AI',
+    text: `${intro}<br><br>${emoji} ${reply}<br><br><small>${closer}</small>`,
+    sample: `Try outlining givens → unknowns → equation. Then solve. (AI question)`,
+    correct: null,
+    keywords: [],
+    choices: null
+  };
+}
+
+/* read + validate current form selections; returns meta or null */
+function readMetaOrPrompt() {
+  const area = $("topic")?.value || '';
+  const sport = $("hobby")?.value || '';
+  const level = $("difficulty")?.value || '';
+  const grade = $("grade")?.value || '';
+  const qty = Math.max(1, Math.min(30, parseInt(($("qty")?.value || '1'), 10) || 1));
+
+  if (!area) { $("topic").reportValidity?.(); return null; }
+  if (!sport) { $("hobby").reportValidity?.(); return null; }
+  if (!level) { $("difficulty").reportValidity?.(); return null; }
+  if (!grade) { $("grade").reportValidity?.(); return null; }
+
+  return { area, sport, level, grade, qty };
+}
+
+
 /* ---------------------------- Area generators ----------------------------- */
 /* Strategy: Each area has 20 reusable pattern functions (PAT[area][i]).
    Level tunes numbers & operations so the same pattern has E/M/H variants.
@@ -153,13 +207,15 @@ const ALG_PATTERNS = [
       correct: need, keywords: ['average', 'mean']
     };
   },
-  // 4 Proportion (solve x)
+  // 4 Proportion (solve x) — fixed to be solvable
   (lvl, g) => {
-    const a = rand(2, 5), b = rand(3, 9), x = rand(2, 6);
+    const a = rand(2, 5), b = rand(3, 9);
+    // a:b = x:(a*b) ⇒ x = a^2
+    const denom = a * b;
     return {
-      text: `If ${a}:${b} = x:${a * x}, find x.`,
-      sample: `${a}/${b} = x/${a * x} ⇒ x = ${a * x}·${a}/${b} = ${(a * a * x)}/${b}.`,
-      correct: Math.round((a * a * x / b) * 100) / 100, keywords: ['ratio', 'proportion']
+      text: `If ${a}:${b} = x:${denom}, find x.`,
+      sample: `${a}/${b} = x/${denom} ⇒ x = ${denom}·${a}/${b} = ${a * a}.`,
+      correct: a * a, keywords: ['ratio', 'proportion']
     };
   },
   // 5 Percent increase
@@ -423,7 +479,9 @@ const CAL_PATTERNS = [
   // 11 Second derivative
   () => { const a = rand(1, 5), b = rand(1, 5); return { text: `f(t)=${a}t³-${b}t. Compute f''(t).`, sample: `6${a}t.`, correct: `${6 * a}t`, keywords: ['second'] }; },
   // 12 Tangent slope at t0
-  () => { const a = rand(2, 6), t0 = rand(1, 3); return { text: `f(t)=t³-${a}t. Slope at t=${t0}?`, sample: `3t²-${a} ⇒ ${3 * t0 * t0 - a}.`, correct: 3 * t0 * t0 - a, keywords: ['tangent'] }; },
+  () => {
+    const a = rand(2, 6), t0 = rand(1, 3); return { text: `f(t)=t³-${a}t. Slope at t=${t0}?`, sample: `3t²-${a} ⇒ ${3 * t0 * t0 - a}.`, correct: 3 * t0 * t0 - a, keywords: ['tangent'] };
+  },
   // 13 Critical points
   () => { const a = rand(3, 9); return { text: `f(t)=t³-${a}t. Critical points?`, sample: `3t²-${a}=0 ⇒ t=±√(${a}/3).`, correct: null, keywords: ['critical'] }; },
   // 14 Increasing intervals
@@ -448,8 +506,8 @@ const CAL_PATTERNS = [
 
 /* ------------------------------- ROUTER ----------------------------------- */
 function genByArea(kind, grade, sport, level) {
-  const area = kind.slice(0, kind.indexOf('_'));     // alg / geo / tri / prob / cal
-  const idx = parseInt(kind.split('_')[2], 10) - 1; // 0..19
+  const area = kind.slice(0, kind.indexOf('_'));
+  const idx = parseInt(kind.split('_')[2], 10) - 1;
 
   const g = Math.max(7, Math.min(10, +grade || 7));
   let body;
@@ -461,17 +519,15 @@ function genByArea(kind, grade, sport, level) {
   else if (area === 'cal') body = CAL_PATTERNS[idx % CAL_PATTERNS.length](level, g, sport);
   else body = { text: `Warm-up: evaluate ${g}x at x=2.`, sample: `= ${2 * g}.`, correct: 2 * g, keywords: ['warmup'] };
 
-  // Attach MCQ choices ~50% when numeric
   let choices = null;
   if (typeof body.correct === 'number' && isFinite(body.correct) && Math.random() < 0.5) {
     choices = buildChoices(body.correct);
   }
 
-  // Fun wrapper
-  const { intro, closer, emoji } = funWrap((sport || '').toLowerCase());
+  const { intro, closer } = funWrap((sport || '').toLowerCase());
   return {
     tag: cap(area === 'alg' ? 'Algebra' : area === 'geo' ? 'Geometry' : area === 'tri' ? 'Trigonometry' : area === 'prob' ? 'Probability' : 'Calculus'),
-    text: `${emoji} ${intro}<br><br>${body.text}`,
+    text: `${intro}<br><br>${body.text}`,
     sample: `${body.sample} ${closer}`,
     correct: body.correct ?? null,
     keywords: (body.keywords || []).map(s => String(s).toLowerCase()),
@@ -492,9 +548,7 @@ function spawnQuestionForCurrentCombo() {
   const kind = deck.order[deck.cursor++];
   const q = genByArea(kind, meta.grade, meta.sport, meta.level);
   const recent = deck.recentTexts;
-  if (recent.includes(q.text)) { // avoid immediate duplicate
-    return spawnQuestionForCurrentCombo();
-  }
+  if (recent.includes(q.text)) { return spawnQuestionForCurrentCombo(); }
   recent.push(q.text); if (recent.length > 12) recent.shift();
   learn(meta.area === 'mix' ? 'mix' : meta.area, meta.level, q);
   return q;
@@ -530,7 +584,7 @@ function resetHistory() { localStorage.removeItem(STORAGE_KEY); }
 function renderChoices(q) {
   const box = $("choices");
   if (!box) return;
-  box.innerHTML = "";               // clear any previous options
+  box.innerHTML = "";
   if (!q.choices || !q.choices.length) { box.hidden = true; return; }
   q.choices.forEach(text => {
     const btn = document.createElement('button');
@@ -547,7 +601,6 @@ function renderChoices(q) {
     });
     box.appendChild(btn);
   });
-  // Add a tiny spacer after MCQ options for breathing room
   const spacer = document.createElement('div');
   spacer.style.height = '10px';
   box.appendChild(spacer);
@@ -560,7 +613,7 @@ function renderQuestion() {
     $("q-meta").textContent = '—';
     $("status").textContent = '';
     $("answer").value = '';
-    clearChoicesBox();              // <- ensure MCQs are removed when nothing to show
+    clearChoicesBox();
     return;
   }
   const q = state.questions[state.idx];
@@ -606,7 +659,7 @@ document.addEventListener('DOMContentLoaded', () => {
       ensureDeck(state.meta);
 
       const first = spawnQuestionForCurrentCombo();
-      clearChoicesBox();           // avoid flash of stale options
+      clearChoicesBox();
       if (first) state.questions.push(first);
       renderQuestion();
     });
@@ -619,7 +672,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $("grade").selectedIndex = 0;
     if ($("qty")) $("qty").value = 3;
     $("answer").value = '';
-    clearChoicesBox();            // <-- CRITICAL: ensure MCQ options are wiped & hidden
+    clearChoicesBox();
     state = { questions: [], idx: 0, meta: { area: '', sport: '', level: '', grade: '', qty: 3 }, decks: {} };
     renderQuestion();
   });
@@ -634,7 +687,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!state.meta.area) { alert('Generate a question first.'); return; }
     const cap = parseInt(state.meta.qty, 10) || 1;
 
-    // If qty == 1, always spawn a brand-new question and REPLACE the single one
     if (cap === 1) {
       const q = spawnQuestionForCurrentCombo();
       if (q) { state.questions[0] = q; state.idx = 0; renderQuestion(); }
@@ -658,6 +710,44 @@ document.addEventListener('DOMContentLoaded', () => {
     $("status").innerHTML = `<span class="${res.score >= 60 ? 'ok' : 'bad'}">Score: ${res.score}/100</span> — ${res.verdict}.${missingTxt}`;
     saveHistory({ tag: q.tag, score: res.score, at: Date.now(), level: state.meta.level, grade: state.meta.grade, sport: state.meta.sport });
     updateHistoryUI();
+  });
+
+  // ✨ AI Question — requires user to pick combo + qty first; generates qty AI questions
+  $("btn-ai")?.addEventListener('click', async () => {
+    try {
+      const meta = readMetaOrPrompt();
+      if (!meta) return; // invalid form selections; reportValidity already called
+
+      // Remember selections for header/meta
+      state.meta = { ...state.meta, ...meta };
+
+      const n = meta.qty || 1;
+
+      if (n === 1) {
+        const q = await aiBuildQuestion(meta);
+        if (state.questions.length) {
+          state.questions[state.idx] = q;
+        } else {
+          state.questions.push(q);
+          state.idx = 0;
+        }
+        clearChoicesBox();
+        renderQuestion();
+        return;
+      }
+
+      // n > 1 — append n AI questions
+      for (let i = 0; i < n; i++) {
+        const q = await aiBuildQuestion(meta);
+        state.questions.push(q);
+      }
+      state.idx = state.questions.length - 1;
+      clearChoicesBox();
+      renderQuestion();
+    } catch (err) {
+      console.error(err);
+      alert(`AI Question failed: ${err?.message || 'unknown error'}\n\nTip: run the bridge with "npm run groq" and check http://localhost:8787/api/health`);
+    }
   });
 
   $("btn-sample")?.addEventListener('click', () => {
