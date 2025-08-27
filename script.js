@@ -483,7 +483,9 @@ const CAL_PATTERNS = [
     const a = rand(2, 6), t0 = rand(1, 3); return { text: `f(t)=t³-${a}t. Slope at t=${t0}?`, sample: `3t²-${a} ⇒ ${3 * t0 * t0 - a}.`, correct: 3 * t0 * t0 - a, keywords: ['tangent'] };
   },
   // 13 Critical points
-  () => { const a = rand(3, 9); return { text: `f(t)=t³-${a}t. Critical points?`, sample: `3t²-${a}=0 ⇒ t=±√(${a}/3).`, correct: null, keywords: ['critical'] }; },
+  () => {
+    const a = rand(3, 9); return { text: `f(t)=t³-${a}t. Critical points?`, sample: `3t²-${a}=0 ⇒ t=±√(${a}/3).`, correct: null, keywords: ['critical'] };
+  },
   // 14 Increasing intervals
   () => { const a = rand(3, 9); return { text: `f(t)=t⁴-${a}t². Increasing intervals?`, sample: `f'=2t(2t²-${a}); sign chart.`, correct: null, keywords: ['increasing'] }; },
   // 15 Average value
@@ -535,12 +537,12 @@ function genByArea(kind, grade, sport, level) {
   };
 }
 
-/* -------------------- deck-driven spawn (no identical repeat) ------------- */
+/* -------------------- LOCAL spawn (no identical repeat) ------------------- */
 function ensureKinds(meta) {
   if (meta.area === 'mix') return true;
   return Boolean(CARD_BANK[meta.area]?.[meta.level]);
 }
-function spawnQuestionForCurrentCombo() {
+function spawnQuestionForCurrentCombo() { // LOCAL ONLY
   const meta = state.meta;
   if (!meta.area || !meta.level || !meta.grade || !ensureKinds(meta)) return null;
   const deck = ensureDeck(meta);
@@ -552,6 +554,26 @@ function spawnQuestionForCurrentCombo() {
   recent.push(q.text); if (recent.length > 12) recent.shift();
   learn(meta.area === 'mix' ? 'mix' : meta.area, meta.level, q);
   return q;
+}
+
+/* -------------------- MIXED spawn (AI + LOCAL) ---------------------------- */
+/** Tune ratio: 0.0 → always local, 1.0 → always AI */
+let AI_CHANCE = 0.75;
+window.setAIMixRatio = (p) => { const v = Math.max(0, Math.min(1, Number(p))); AI_CHANCE = isNaN(v) ? AI_CHANCE : v; };
+
+async function spawnMixedQuestionForCurrentCombo() {
+  const meta = state.meta;
+  const tryAI = Math.random() < AI_CHANCE;
+  if (tryAI) {
+    try {
+      const qAI = await aiBuildQuestion(meta);
+      return qAI;
+    } catch (e) {
+      console.warn('AI failed; falling back to local:', e?.message || e);
+      // fall through to local
+    }
+  }
+  return spawnQuestionForCurrentCombo();
 }
 
 /* ---------------------- evaluation (numeric/keyword) ---------------------- */
@@ -642,7 +664,7 @@ function updateHistoryUI() {
 document.addEventListener('DOMContentLoaded', () => {
   const form = $("generator-form");
   if (form) {
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const area = $("topic").value;
       const sport = $("hobby").value;
@@ -658,8 +680,9 @@ document.addEventListener('DOMContentLoaded', () => {
       state = { questions: [], idx: 0, meta: { area, sport, level, grade, qty }, decks: {} };
       ensureDeck(state.meta);
 
-      const first = spawnQuestionForCurrentCombo();
       clearChoicesBox();
+      // First question = MIXED
+      const first = await spawnMixedQuestionForCurrentCombo();
       if (first) state.questions.push(first);
       renderQuestion();
     });
@@ -683,18 +706,18 @@ document.addEventListener('DOMContentLoaded', () => {
     renderQuestion();
   });
 
-  $("btn-next")?.addEventListener('click', () => {
+  $("btn-next")?.addEventListener('click', async () => {
     if (!state.meta.area) { alert('Generate a question first.'); return; }
     const cap = parseInt(state.meta.qty, 10) || 1;
 
     if (cap === 1) {
-      const q = spawnQuestionForCurrentCombo();
+      const q = await spawnMixedQuestionForCurrentCombo();
       if (q) { state.questions[0] = q; state.idx = 0; renderQuestion(); }
       return;
     }
 
     if (state.questions.length < cap) {
-      const q = spawnQuestionForCurrentCombo();
+      const q = await spawnMixedQuestionForCurrentCombo();
       if (q) { state.questions.push(q); state.idx = state.questions.length - 1; renderQuestion(); }
       return;
     }
@@ -712,15 +735,12 @@ document.addEventListener('DOMContentLoaded', () => {
     updateHistoryUI();
   });
 
-  // ✨ AI Question — requires user to pick combo + qty first; generates qty AI questions
+  // (Optional) Old AI button remains; not required anymore.
   $("btn-ai")?.addEventListener('click', async () => {
     try {
       const meta = readMetaOrPrompt();
-      if (!meta) return; // invalid form selections; reportValidity already called
-
-      // Remember selections for header/meta
+      if (!meta) return;
       state.meta = { ...state.meta, ...meta };
-
       const n = meta.qty || 1;
 
       if (n === 1) {
@@ -736,7 +756,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // n > 1 — append n AI questions
       for (let i = 0; i < n; i++) {
         const q = await aiBuildQuestion(meta);
         state.questions.push(q);
