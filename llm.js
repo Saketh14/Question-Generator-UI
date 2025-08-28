@@ -4,10 +4,10 @@
     system = 'You are a friendly, concise math coach. Explain clearly.',
     temperature = 0.4,
     max_tokens = 256,
-    base = 'http://localhost:8787'
+    base = "https://llm-bridge.saisakethuppuluri.workers.dev"
   } = {}) {
     try {
-      const r = await fetch(`${base}/api/llm`, {
+      const r = await fetch(`${base}/api/next`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, system, temperature, max_tokens })

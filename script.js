@@ -1,4 +1,4 @@
-// script.js — LLM-only generator with MCQs, robust LLM, and strict "new on Next" + max 8
+// script.js — exact N questions; 50/50 MCQ/Open; no extras after limit
 'use strict';
 const $ = (id) => document.getElementById(id);
 
@@ -16,7 +16,7 @@ const SPORTS = {
   basketball: { emoji: "🏀", noun: "points", unit: "points", field: "court" },
   tennis: { emoji: "🎾", noun: "points", unit: "points", field: "court" }
 };
-function sportEmoji(s) { const k = (s || '').toLowerCase(); return SPORTS[k]?.emoji || '🧠'; }
+const sportEmoji = (s) => (SPORTS[(s || '').toLowerCase()]?.emoji || '🧠');
 
 /* --------------------------- persistent “learning” ------------------------ */
 const LEARN_KEY = 'trainerLearnedV3';
@@ -69,40 +69,12 @@ let state = {
   questions: [],
   idx: 0,
   meta: { area: '', sport: '', level: '', grade: '', qty: 3 },
-  seen: {} // { comboKey: Set(plainProblem) }
+  seen: {},
+  mcqCount: 0,
+  openCount: 0
 };
 
-/* ------------------------------- “fine-tune” ------------------------------ */
-const SYSTEM_GUIDE = `
-You are Math Trainer LLM. Generate playful, rigorous math word problems tailored by subject (area), level, grade, and sport theme.
-Constraints:
-- 2–4 sentences; use concrete numbers; problem must be solvable without revealing the answer.
-- Return JSON only (no extra commentary).
-- Include 4 MCQ options with exactly one correct.
-- Options must be plausible, distinct, and similar magnitude; avoid giveaways.
-- Tidy arithmetic (integers or clean decimals) when possible.
-- Keep to difficulty + grade vocabulary. No solution spoilers in problem text.
-- STRICTLY produce different problems if asked repeatedly for the same combination; use varied numbers and setup.
-Tone: Friendly, confident, concise classroom coach.
-`;
-
-const FEWSHOT_MCQ = [
-  {
-    role: "user",
-    content: "AREA=algebra; LEVEL=easy; GRADE=8; SPORT=basketball; FORMAT=JSON"
-  },
-  {
-    role: "assistant",
-    content: JSON.stringify({
-      problem: "During drills, Jamie scores 4 points per layup and 2 points per free throw. In one practice, she makes 6 layups and some free throws to total 28 points. How many free throws did she make?",
-      choices: ["2", "4", "5", "6"],
-      answer_index: 0,
-      solution_html: "Layups = 6×4 = 24 points.<br>Let f be the number of free throws (2 points each): 24 + 2f = 28 ⇒ 2f = 4 ⇒ f = <strong>2</strong>."
-    })
-  }
-];
-
-/* ------------------------------ helpers ----------------------------------- */
+/* ------------------------------- prompts ---------------------------------- */
 function metaToArea(meta) {
   const m = (meta.area || '').toLowerCase();
   if (['algebra', 'geometry', 'trigonometry', 'probability', 'calculus', 'mix'].includes(m)) return m;
@@ -126,23 +98,35 @@ function jsonExtract(text) {
   return null;
 }
 
-function sanitizeMCQPayload(payload) {
+/* ---------- MCQ/Open sanitization + alternating for ~50/50 ---------------- */
+function sanitizePayload(payload) {
   if (!payload || typeof payload !== 'object') throw new Error('Invalid LLM JSON.');
   let { problem, choices, answer_index, solution_html } = payload;
   if (typeof problem !== 'string' || !problem.trim()) throw new Error('Missing problem.');
-  if (!Array.isArray(choices) || choices.length !== 4) throw new Error('Choices must have 4 options.');
-  choices = choices.map(c => String(c ?? '').trim());
-  if (choices.some(c => !c)) throw new Error('Empty choice detected.');
-  const idx = Number(answer_index);
-  if (!Number.isInteger(idx) || idx < 0 || idx > 3) throw new Error('answer_index must be 0..3.');
-  solution_html = String(solution_html ?? '').trim();
-  return { problem: problem.trim(), choices, answer_index: idx, solution_html };
+  const hasMCQ = Array.isArray(choices);
+
+  if (hasMCQ) {
+    if (choices.length !== 4) throw new Error('Choices must have 4 options.');
+    choices = choices.map(c => String(c ?? '').trim());
+    if (choices.some(c => !c)) throw new Error('Empty choice detected.');
+    const idx = Number(answer_index);
+    if (!Number.isInteger(idx) || idx < 0 || idx > 3) throw new Error('answer_index must be 0..3.');
+    solution_html = String(solution_html ?? '').trim();
+    return { type: 'mcq', problem: problem.trim(), choices, answer_index: idx, solution_html };
+  } else {
+    solution_html = String(solution_html ?? '').trim();
+    return { type: 'open', problem: problem.trim(), solution_html };
+  }
+}
+function wantMCQ(i) {
+  // Alternate by index: even -> MCQ, odd -> open (50/50)
+  return i % 2 === 0;
 }
 
 /* ------------------------------- LLM bridge ------------------------------- */
-async function llmAsk(messagesOrString, { retries = 2, delayMs = 450 } = {}) {
+async function llmAsk(messagesOrString, { retries = 1, delayMs = 300 } = {}) {
   if (!window.LLM || typeof window.LLM.ask !== 'function') {
-    throw new Error('LLM bridge missing. Start it (e.g., "npm run groq") and set your API key.');
+    throw new Error('LLM bridge missing.');
   }
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -169,42 +153,51 @@ async function llmAsk(messagesOrString, { retries = 2, delayMs = 450 } = {}) {
 }
 
 /* ------------------------------- prompts ---------------------------------- */
-async function aiQuestionMessages(meta, dedupHints = []) {
+async function aiQuestionMessages(meta, dedupHints = [], indexInBatch = 0) {
   const area = metaToArea(meta);
   const level = meta.level || 'easy';
   const grade = meta.grade || '8';
   const sport = (meta.sport || 'basketball').toLowerCase();
 
-  const seen = getLearned(area, level).slice(0, 8);
+  const seen = getLearned(area, level).slice(0, 4);
   const avoidTexts = [
     ...seen.map(r => r.text).filter(Boolean),
     ...dedupHints
   ].join("\n---\n");
 
   const seed = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const makeMCQ = wantMCQ(indexInBatch);
+
+  const schema = makeMCQ
+    ? { problem: "string", choices: "string[4]", answer_index: "integer 0..3", solution_html: "string" }
+    : { problem: "string", solution_html: "string" };
+
+  const instructions = makeMCQ
+    ? `Return JSON ONLY with keys: problem, choices (4 strings), answer_index (0..3), solution_html.`
+    : `Return JSON ONLY with keys: problem, solution_html. No choices.`;
+
+  const guide =
+    `You are Math Trainer LLM. Generate playful, rigorous ${makeMCQ ? "MCQ" : "open-ended"} math problems.
+Constraints:
+- 2–4 sentences; use concrete numbers; solvable; no spoilers in problem text.
+- Keep difficulty and vocabulary to the selected grade level.
+- ${makeMCQ ? "Include exactly 4 plausible MCQ options with ONE correct." : "Do NOT include choices."}
+- Produce JSON only.
+Tone: Friendly, concise classroom coach.`;
 
   const userPayload = {
     REQUIREMENTS: {
       AREA: area, LEVEL: level, GRADE: grade, SPORT: sport,
-      STYLE: "2-4 sentences", MCQ: 4, UNIQUE_CORRECT: true, NO_SPOILERS_IN_PROBLEM: true
+      STYLE: "2-4 sentences", UNIQUE_CORRECT: true, NO_SPOILERS_IN_PROBLEM: true
     },
     AVOID_SIMILAR_TO: avoidTexts || "—",
     SEED: seed,
-    FORMAT: {
-      type: "json",
-      schema: {
-        problem: "string",
-        choices: "string[4]",
-        answer_index: "integer 0..3",
-        solution_html: "string (short HTML steps)"
-      }
-    }
+    FORMAT: { type: "json", schema }
   };
 
   return [
-    { role: "system", content: SYSTEM_GUIDE.trim() },
-    ...FEWSHOT_MCQ,
-    { role: "user", content: JSON.stringify(userPayload) }
+    { role: "system", content: guide.trim() },
+    { role: "user", content: JSON.stringify(userPayload) + "\n" + instructions }
   ];
 }
 
@@ -230,13 +223,13 @@ Requirements:
   ];
 }
 
-/* --------------------------- builders (MCQ) -------------------------------- */
-async function aiBuildQuestion(meta, dedupHints = []) {
-  const msgs = await aiQuestionMessages(meta, dedupHints);
+/* --------------------------- builders (MCQ/open) -------------------------- */
+async function aiBuildQuestion(meta, dedupHints = [], indexInBatch = 0) {
+  const msgs = await aiQuestionMessages(meta, dedupHints, indexInBatch);
   const raw = await llmAsk(msgs);
   const parsed = jsonExtract(raw);
   if (!parsed) throw new Error('LLM did not return valid JSON.');
-  const data = sanitizeMCQPayload(parsed);
+  const data = sanitizePayload(parsed);
 
   const { intro, closer } = funWrap((meta.sport || '').toLowerCase());
   const emoji = sportEmoji(meta.sport);
@@ -245,40 +238,41 @@ async function aiBuildQuestion(meta, dedupHints = []) {
     tag: cap(meta.area === 'mix' ? 'Mixed' : meta.area),
     plainProblem: data.problem,
     text: `${intro}<br><br>${emoji} ${data.problem}<br><br><small>${closer}</small>`,
-    choices: data.choices,
-    answer_index: data.answer_index,
     solution_html: data.solution_html || '',
-    correct: data.choices[data.answer_index] ?? null,
     keywords: []
   };
+
+  if (data.type === 'mcq') {
+    q.choices = data.choices;
+    q.answer_index = data.answer_index;
+    q.correct = data.choices[data.answer_index] ?? null;
+  } else {
+    q.choices = null;
+    q.answer_index = null;
+    q.correct = null;
+  }
+
   learn(metaToArea(meta), meta.level, q);
   return q;
 }
 
-async function aiBuildSample(meta, plainProblem) {
-  const msgs = await aiSampleMessages(meta, plainProblem);
-  return await llmAsk(msgs);
-}
-
-/* ---------- ensure NEW question each time (per combination) with retries --- */
-async function generateUniqueQuestion(meta) {
+/* ---------- ensure NEW question each time for a combo with retries -------- */
+async function generateUniqueQuestion(meta, indexInBatch = 0) {
   const key = comboKey(meta);
   state.seen[key] = state.seen[key] || new Set();
   const seenSet = state.seen[key];
 
-  const recentTexts = Array.from(seenSet).slice(-12); // pass to AVOID_SIMILAR_TO
+  const recentTexts = Array.from(seenSet).slice(-4);
   for (let attempt = 0; attempt < 3; attempt++) {
-    const q = await aiBuildQuestion(meta, recentTexts);
+    const q = await aiBuildQuestion(meta, recentTexts, indexInBatch);
     const text = (q.plainProblem || '').trim();
     if (text && !seenSet.has(text)) {
       seenSet.add(text);
       return q;
     }
-    // try again with stronger hint (append the duplicate text)
     recentTexts.push(text);
   }
-  // If it's still repeating, return the last one anyway
-  const fallback = await aiBuildQuestion(meta, recentTexts);
+  const fallback = await aiBuildQuestion(meta, recentTexts, indexInBatch);
   const fbText = (fallback.plainProblem || '').trim();
   seenSet.add(fbText);
   return fallback;
@@ -295,12 +289,10 @@ function clearChoicesBox() {
   const box = $('choices'); if (!box) return;
   box.innerHTML = ''; box.hidden = true;
 }
-
 function renderChoices(q) {
   const box = $('choices'); if (!box) return;
   box.innerHTML = '';
   if (!q.choices || q.choices.length !== 4) { box.hidden = true; return; }
-
   q.choices.forEach((text, i) => {
     const btn = document.createElement('button');
     btn.className = 'choice';
@@ -321,7 +313,7 @@ function renderChoices(q) {
 
 /* ------------------------------ evaluation -------------------------------- */
 function evaluateAnswer(answer, q) {
-  if (q && Array.isArray(q.choices) && Number.isInteger(q.answer_index)) {
+  if (q?.choices && Number.isInteger(q.answer_index)) {
     const chosen = (answer ?? '').trim();
     const isCorrect = chosen && chosen === q.choices[q.answer_index];
     const score = isCorrect ? 100 : 0;
@@ -329,26 +321,37 @@ function evaluateAnswer(answer, q) {
     const missing = isCorrect ? [] : [q.choices[q.answer_index]];
     return { score, verdict, missing };
   }
-  return { score: 0, verdict: 'Please select an option.', missing: [] };
+  return { score: 0, verdict: 'Open-ended question — compare with the sample solution.', missing: [] };
 }
 
 /* ------------------------- question rendering ----------------------------- */
 function renderQuestion() {
-  if (!state.questions.length) {
+  const total = state.meta.qty || state.questions.length || 0;
+  const nextBtn = $("btn-next"), prevBtn = $("btn-prev");
+  const copyBtn = $("btn-copy"), evalBtn = $("btn-eval"), sampleBtn = $("btn-sample");
+  const hasQ = !!state.questions.length;
+
+  if (!hasQ) {
     $("problem").innerHTML = 'No question yet. Choose inputs and click <em>Generate Questions</em>.';
     $("q-meta").textContent = '—';
     $("status").textContent = '';
     $("answer").value = '';
     clearChoicesBox();
+    [nextBtn, prevBtn, copyBtn, evalBtn, sampleBtn].forEach(b => b && (b.disabled = true));
     return;
   }
+
   const q = state.questions[state.idx];
-  const total = Math.min(MAX_QUESTIONS, state.meta?.qty || state.questions.length);
   $("problem").innerHTML = q.text;
   $("q-meta").textContent = `Q${state.idx + 1}/${total} · ${q.tag} · ${state.meta.level} · Grade ${state.meta.grade}${state.meta.sport ? ' · ' + state.meta.sport : ''}`;
   $("status").textContent = '';
   $("answer").value = '';
   renderChoices(q);
+
+  // nav buttons enable/disable
+  prevBtn.disabled = state.idx <= 0;
+  nextBtn.disabled = state.idx >= total - 1; // no more than requested count
+  [copyBtn, evalBtn, sampleBtn].forEach(b => b && (b.disabled = false));
 }
 
 function updateHistoryUI() {
@@ -367,9 +370,9 @@ function updateHistoryUI() {
 
 /* -------------------------------- bindings -------------------------------- */
 function setBusy(on) {
-  const btns = ["btn-next", "btn-eval", "btn-sample", "btn-copy"];
-  btns.forEach(id => { const b = $(id); if (b) b.disabled = on; });
-  const formBtn = $("generator-form")?.querySelector('button[type="submit"]');
+  const formBtn = $("btn-generate");
+  const buttons = ["btn-next", "btn-prev", "btn-eval", "btn-sample", "btn-copy", "btn-clear"];
+  buttons.forEach(id => { const b = $(id); if (b) b.disabled = on || b.dataset.locked === '1'; });
   if (formBtn) formBtn.disabled = on;
 }
 
@@ -390,15 +393,38 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!level) { $("difficulty").reportValidity?.(); return; }
       if (!grade) { $("grade").reportValidity?.(); return; }
 
-      state = { questions: [], idx: 0, meta: { area, sport, level, grade, qty }, seen: state.seen || {} };
-      // reset the "seen" set for this new combo to ensure fresh generation
-      state.seen[comboKey(state.meta)] = new Set();
+      // reset state
+      state = {
+        questions: [],
+        idx: 0,
+        meta: { area, sport, level, grade, qty },
+        seen: {},
+        mcqCount: 0,
+        openCount: 0
+      };
+
+      $("problem").innerHTML = '⏳ Generating your set…';
+      $("q-meta").textContent = '—';
+      $("status").textContent = '';
+      $("answer").value = '';
+      clearChoicesBox();
 
       setBusy(true);
-      $("problem").innerHTML = '⏳ Generating question…';
+      $("progress").textContent = `0 / ${qty} ready…`;
       try {
-        const q = await generateUniqueQuestion(state.meta);
-        state.questions.push(q);
+        const key = comboKey(state.meta);
+        state.seen[key] = new Set();
+
+        // generate EXACT qty; alternate MCQ/open by index
+        for (let i = 0; i < qty; i++) {
+          const q = await generateUniqueQuestion(state.meta, i);
+          state.questions.push(q);
+          $("progress").textContent = `${i + 1} / ${qty} ready…`;
+        }
+
+        // Show first, lock Next if only one
+        state.idx = 0;
+        $("progress").textContent = `✅ Ready: ${qty} / ${qty}`;
         renderQuestion();
       } catch (err) {
         console.error(err);
@@ -416,7 +442,8 @@ document.addEventListener('DOMContentLoaded', () => {
     $("grade").selectedIndex = 0;
     if ($("qty")) $("qty").value = 3;
     $("answer").value = '';
-    state = { questions: [], idx: 0, meta: { area: '', sport: '', level: '', grade: '', qty: 3 }, seen: {} };
+    state = { questions: [], idx: 0, meta: { area: '', sport: '', level: '', grade: '', qty: 3 }, seen: {}, mcqCount: 0, openCount: 0 };
+    $("progress").textContent = '';
     renderQuestion();
   });
 
@@ -426,35 +453,24 @@ document.addEventListener('DOMContentLoaded', () => {
     renderQuestion();
   });
 
-  // ALWAYS generate a brand-new question on Next; keep only the latest 8
-  $("btn-next")?.addEventListener('click', async () => {
-    if (!state.meta.area) { alert('Generate a question first.'); return; }
-
-    setBusy(true);
-    try {
-      const q = await generateUniqueQuestion(state.meta);
-      state.questions.push(q);
-      // Trim to MAX_QUESTIONS (keep the latest)
-      while (state.questions.length > MAX_QUESTIONS) state.questions.shift();
-      // Move index to the newest
-      state.idx = state.questions.length - 1;
-      renderQuestion();
-    } catch (err) {
-      console.error(err);
-      alert(`LLM error: ${err?.message || 'unknown'}`);
-    } finally {
-      setBusy(false);
-    }
+  // navigate only; DO NOT create new after limit
+  $("btn-next")?.addEventListener('click', () => {
+    if (!state.questions.length) return;
+    const limit = Number(state.meta.qty || state.questions.length);
+    state.idx = Math.min(limit - 1, state.idx + 1);
+    renderQuestion();
   });
 
   $("btn-eval")?.addEventListener('click', () => {
-    if (!state.questions.length) { alert('Generate a question first.'); return; }
+    if (!state.questions.length) { alert('Generate a question set first.'); return; }
     const q = state.questions[state.idx];
     const res = evaluateAnswer($("answer").value, q);
     const missingTxt = res.missing && res.missing.length ? ` Missing: <em>${res.missing.join(', ')}</em>` : '';
     $("status").innerHTML = `<span class="${res.score >= 60 ? 'ok' : 'bad'}">Score: ${res.score}/100</span> — ${res.verdict}.${missingTxt}`;
     const scoreItem = { tag: q.tag, score: res.score, at: Date.now(), level: state.meta.level, grade: state.meta.grade, sport: state.meta.sport };
-    saveHistory(scoreItem); updateHistoryUI();
+    const list = loadHistory(); const newList = [scoreItem, ...list].slice(0, 200);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newList));
+    updateHistoryUI();
   });
 
   $("btn-sample")?.addEventListener('click', async () => {
@@ -465,7 +481,8 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       let solution = q.solution_html;
       if (!solution) {
-        solution = await aiBuildSample(state.meta, q.plainProblem || $("problem").innerText);
+        const msgs = await aiSampleMessages(state.meta, q.plainProblem || $("problem").innerText);
+        solution = await llmAsk(msgs);
         q.solution_html = solution;
       }
       $("status").innerHTML = `<em>Solution:</em><br>${solution}`;

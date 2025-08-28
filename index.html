@@ -6,6 +6,28 @@
   <meta name="viewport" content="width=device-width" />
   <title>Math Trainer — Fun Mode</title>
   <link rel="stylesheet" href="style.css" />
+  <!-- Silence missing favicon warnings -->
+  <link rel="icon" href="data:,">
+  <style>
+    /* Optional minor helpers so you see progress cleanly */
+    .muted {
+      opacity: 0.7
+    }
+
+    .hidden {
+      display: none
+    }
+
+    .progress {
+      font-size: 0.95rem;
+      margin-top: .25rem;
+    }
+
+    .disabled {
+      opacity: .5;
+      pointer-events: none;
+    }
+  </style>
 </head>
 
 <body>
@@ -86,8 +108,8 @@
           <button type="submit" id="btn-generate" class="pulse">Generate Questions</button>
           <button type="button" class="ghost" id="btn-clear">Clear</button>
         </div>
-        <small class="hint">Tip: set <strong># of questions = 1</strong> for endless fresh questions with the Next
-          button.</small>
+        <small class="hint">Exact count will be generated (max 8). Alternates MCQ / Open-ended.</small>
+        <div class="progress muted" id="progress" aria-live="polite"></div>
       </form>
     </section>
 
@@ -104,11 +126,9 @@
 
       <div class="spacer"></div>
       <div class="actions">
-        <button type="button" class="secondary" id="btn-prev">◀ Previous</button>
-        <button type="button" class="secondary" id="btn-next">Next ▶</button>
-        <!-- ✨ NEW: AI button -->
-        <!-- <button type="button" class="secondary" id="btn-ai">✨ AI Question</button> -->
-        <button type="button" class="ghost" id="btn-copy">Copy Question</button>
+        <button type="button" class="secondary" id="btn-prev" disabled>◀ Previous</button>
+        <button type="button" class="secondary" id="btn-next" disabled>Next ▶</button>
+        <button type="button" class="ghost" id="btn-copy" disabled>Copy Question</button>
       </div>
     </section>
 
@@ -118,8 +138,8 @@
       <textarea id="answer" placeholder="Type your answer here... (Ctrl/Cmd + Enter to Evaluate)"></textarea>
       <div class="spacer"></div>
       <div class="actions">
-        <button type="button" id="btn-eval">Evaluate</button>
-        <button type="button" class="ghost" id="btn-sample">Show Sample Answer</button>
+        <button type="button" id="btn-eval" disabled>Evaluate</button>
+        <button type="button" class="ghost" id="btn-sample" disabled>Show Sample Answer</button>
       </div>
       <div class="status" id="status" aria-live="polite"></div>
     </section>
@@ -144,8 +164,26 @@
     </section>
   </div>
 
-  <!-- Load optional LLM helper BEFORE your core script -->
-  <script defer src="llm.js"></script>
+  <!-- Inline LLM bridge init (no external llm.js) -->
+  <script>
+    (function () {
+      const API_BASE = "https://llm-bridge.saisakethuppuluri.workers.dev";
+      window.LLM = {
+        ask: async (messagesOrString) => {
+          const r = await fetch(`${API_BASE}/api/next`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages: messagesOrString })
+          });
+          const text = await r.text().catch(() => "");
+          if (!r.ok) throw new Error(text || `HTTP ${r.status}`);
+          if (!text.trim()) throw new Error("Bridge returned empty body");
+          return text;
+        }
+      };
+    })();
+  </script>
+
   <script defer src="script.js"></script>
 </body>
 
