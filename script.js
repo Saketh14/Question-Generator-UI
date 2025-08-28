@@ -1,4 +1,4 @@
-// script.js — exact N questions; 50/50 MCQ/Open; no extras after limit
+// script.js — exact N questions; endless Next only when qty=1; ~50/50 MCQ/Open
 'use strict';
 const $ = (id) => document.getElementById(id);
 
@@ -119,7 +119,7 @@ function sanitizePayload(payload) {
   }
 }
 function wantMCQ(i) {
-  // Alternate by index: even -> MCQ, odd -> open (50/50)
+  // Alternate by index: even -> MCQ, odd -> open (≈50/50)
   return i % 2 === 0;
 }
 
@@ -349,8 +349,10 @@ function renderQuestion() {
   renderChoices(q);
 
   // nav buttons enable/disable
+  const isSingleRolling = Number(state.meta.qty || 0) === 1;
   prevBtn.disabled = state.idx <= 0;
-  nextBtn.disabled = state.idx >= total - 1; // no more than requested count
+  // keep Next enabled if qty=1 (rolling mode); otherwise lock at end
+  nextBtn.disabled = !isSingleRolling && state.idx >= total - 1;
   [copyBtn, evalBtn, sampleBtn].forEach(b => b && (b.disabled = false));
 }
 
@@ -422,7 +424,6 @@ document.addEventListener('DOMContentLoaded', () => {
           $("progress").textContent = `${i + 1} / ${qty} ready…`;
         }
 
-        // Show first, lock Next if only one
         state.idx = 0;
         $("progress").textContent = `✅ Ready: ${qty} / ${qty}`;
         renderQuestion();
@@ -453,10 +454,27 @@ document.addEventListener('DOMContentLoaded', () => {
     renderQuestion();
   });
 
-  // navigate only; DO NOT create new after limit
-  $("btn-next")?.addEventListener('click', () => {
+  // Navigate only; but if qty === 1, generate a fresh new question (rolling mode)
+  $("btn-next")?.addEventListener('click', async () => {
     if (!state.questions.length) return;
     const limit = Number(state.meta.qty || state.questions.length);
+
+    if (limit === 1) {
+      setBusy(true);
+      try {
+        const q = await generateUniqueQuestion(state.meta, 0);
+        state.questions[0] = q;       // keep array length = 1
+        state.idx = 0;
+        renderQuestion();
+      } catch (err) {
+        console.error(err);
+        alert(`LLM error: ${err?.message || 'unknown'}`);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     state.idx = Math.min(limit - 1, state.idx + 1);
     renderQuestion();
   });

@@ -9,7 +9,7 @@
   <!-- Silence missing favicon warnings -->
   <link rel="icon" href="data:,">
   <style>
-    /* Optional minor helpers so you see progress cleanly */
+    /* Optional helpers for subtle UI feedback */
     .muted {
       opacity: 0.7
     }
@@ -21,11 +21,6 @@
     .progress {
       font-size: 0.95rem;
       margin-top: .25rem;
-    }
-
-    .disabled {
-      opacity: .5;
-      pointer-events: none;
     }
   </style>
 </head>
@@ -108,7 +103,10 @@
           <button type="submit" id="btn-generate" class="pulse">Generate Questions</button>
           <button type="button" class="ghost" id="btn-clear">Clear</button>
         </div>
-        <small class="hint">Exact count will be generated (max 8). Alternates MCQ / Open-ended.</small>
+
+        <!-- Your original tip restored + max note -->
+        <small class="hint">Tip: set <strong># of questions = 1</strong> for endless fresh questions with the Next
+          button. <strong><br>Max questions generated will be 8</strong>.</small>
         <div class="progress muted" id="progress" aria-live="polite"></div>
       </form>
     </section>
