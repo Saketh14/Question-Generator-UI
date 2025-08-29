@@ -1,4 +1,4 @@
-// script.js — exact N questions; endless Next only when qty=1; ~50/50 MCQ/Open
+// script.js — model-only; exact N; 50/50 MCQ/Open; strong de-dupe; concise 3-line solutions
 'use strict';
 const $ = (id) => document.getElementById(id);
 
@@ -7,36 +7,43 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const cap = (s) => s ? s[0].toUpperCase() + s.slice(1) : s;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const MAX_QUESTIONS = 8;
+const setProgress = (text) => { const el = $('progress'); if (el) el.textContent = text; };
+const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+const extractNums = (s) => (String(s||'').match(/-?\d+(\.\d+)?/g) || []).slice(0, 40);
 
 /* ----------------------------- sports nouns ------------------------------- */
 const SPORTS = {
   cricket: { emoji: "🏏", noun: "runs", unit: "runs", field: "pitch" },
   football: { emoji: "🏈", noun: "yards", unit: "yards", field: "field" },
-  soccer: { emoji: "⚽", noun: "goals", unit: "goals", field: "pitch" },
-  basketball: { emoji: "🏀", noun: "points", unit: "points", field: "court" },
-  tennis: { emoji: "🎾", noun: "points", unit: "points", field: "court" }
+  soccer:   { emoji: "⚽", noun: "goals", unit: "goals", field: "pitch" },
+  basketball:{ emoji: "🏀", noun: "points", unit: "points", field: "court" },
+  tennis:   { emoji: "🎾", noun: "points", unit: "points", field: "court" }
 };
-const sportEmoji = (s) => (SPORTS[(s || '').toLowerCase()]?.emoji || '🧠');
+const sportEmoji = (s) => (SPORTS[(s||'').toLowerCase()]?.emoji || '🧠');
 
 /* --------------------------- persistent “learning” ------------------------ */
-const LEARN_KEY = 'trainerLearnedV3';
+/* Save/recall per FULL combo (area|level|grade|sport) for stronger variety */
+const LEARN_KEY = 'trainerLearnedV4';
+function comboLearnKey(meta) {
+  return `${(meta.area||'').toLowerCase()}|${(meta.level||'').toLowerCase()}|${(meta.grade||'').toLowerCase()}|${(meta.sport||'').toLowerCase()}`;
+}
 function loadLearned() { try { return JSON.parse(localStorage.getItem(LEARN_KEY)) || {} } catch { return {} } }
 function saveLearned(store) { localStorage.setItem(LEARN_KEY, JSON.stringify(store)); }
-function learn(area, level, q) {
-  const key = `${area}__${level}`;
+function learn(meta, q) {
+  const key = comboLearnKey(meta);
   const store = loadLearned(); store[key] = store[key] || [];
-  const rec = { text: q.plainProblem || q.text, sample: q.solution_html || q.sample, correct: q.correct, keywords: q.keywords || [], choices: q.choices || [] };
-  if (!store[key].some(e => e.text === rec.text)) {
+  const rec = { text: q.plainProblem || q.text, sample: q.solution_html || q.sample, correct: q.correct, choices: q.choices || [] };
+  if (!store[key].some(e => norm(e.text) === norm(rec.text))) {
     store[key].unshift(rec);
     store[key] = store[key].slice(0, 400);
     saveLearned(store);
   }
 }
-function getLearned(area, level) { const store = loadLearned(); return store[`${area}__${level}`] || []; }
+function getLearned(meta) { const store = loadLearned(); return store[comboLearnKey(meta)] || []; }
 
 /* ------------------------------ humor wrappers ---------------------------- */
-const NAMES = ["Rahul", "Aisha", "Maya", "Arjun", "Sam", "Liam", "Zara", "Ishan", "Neha", "Kiran", "Aarav", "Anya"];
-const COACHES = ["Coach Vector", "Captain Fraction", "Professor Pi", "Sir Integrator", "Ms. Matrix"];
+const NAMES = ["Rahul","Aisha","Maya","Arjun","Sam","Liam","Zara","Ishan","Neha","Kiran","Aarav","Anya"];
+const COACHES = ["Coach Vector","Captain Fraction","Professor Pi","Sir Integrator","Ms. Matrix"];
 const INTROS = [
   "{emoji} {coach}: Pssst, quick challenge for {name}!",
   "{emoji} Mission time! Help {name} solve this before the snack timer beeps.",
@@ -69,15 +76,15 @@ let state = {
   questions: [],
   idx: 0,
   meta: { area: '', sport: '', level: '', grade: '', qty: 3 },
-  seen: {},
+  seen: {},          // { comboKey: Set(normalizedProblem) }
   mcqCount: 0,
   openCount: 0
 };
 
-/* ------------------------------- prompts ---------------------------------- */
+/* -------------------------------- helpers --------------------------------- */
 function metaToArea(meta) {
   const m = (meta.area || '').toLowerCase();
-  if (['algebra', 'geometry', 'trigonometry', 'probability', 'calculus', 'mix'].includes(m)) return m;
+  if (['algebra','geometry','trigonometry','probability','calculus','mix'].includes(m)) return m;
   return 'algebra';
 }
 
@@ -88,17 +95,16 @@ function jsonExtract(text) {
     const m = text.match(/```([\s\S]*?)```/);
     if (m && m[1]) text = m[1].trim();
   }
-  try { return JSON.parse(text); } catch { }
+  try { return JSON.parse(text); } catch {}
   const start = text.indexOf('{'), end = text.lastIndexOf('}');
   if (start !== -1 && end !== -1 && end > start) {
-    try { return JSON.parse(text.slice(start, end + 1)); } catch { }
+    try { return JSON.parse(text.slice(start, end + 1)); } catch {}
   }
   const rx = /{[\s\S]*?"problem"[\s\S]*?}/g; const match = rx.exec(text);
-  if (match) { try { return JSON.parse(match[0]); } catch { } }
+  if (match) { try { return JSON.parse(match[0]); } catch {} }
   return null;
 }
 
-/* ---------- MCQ/Open sanitization + alternating for ~50/50 ---------------- */
 function sanitizePayload(payload) {
   if (!payload || typeof payload !== 'object') throw new Error('Invalid LLM JSON.');
   let { problem, choices, answer_index, solution_html } = payload;
@@ -118,13 +124,9 @@ function sanitizePayload(payload) {
     return { type: 'open', problem: problem.trim(), solution_html };
   }
 }
-function wantMCQ(i) {
-  // Alternate by index: even -> MCQ, odd -> open (≈50/50)
-  return i % 2 === 0;
-}
 
 /* ------------------------------- LLM bridge ------------------------------- */
-async function llmAsk(messagesOrString, { retries = 1, delayMs = 300 } = {}) {
+async function llmAsk(messagesOrString, { retries = 2, delayMs = 300, max_tokens } = {}) {
   if (!window.LLM || typeof window.LLM.ask !== 'function') {
     throw new Error('LLM bridge missing.');
   }
@@ -133,13 +135,13 @@ async function llmAsk(messagesOrString, { retries = 1, delayMs = 300 } = {}) {
     try {
       let res;
       if (Array.isArray(messagesOrString)) {
-        res = await window.LLM.ask(messagesOrString);
+        res = await window.LLM.ask(messagesOrString, { max_tokens });
         if (!res || !String(res).trim()) {
           const joined = messagesOrString.map(m => `${m.role.toUpperCase()}:\n${m.content}`).join('\n\n');
-          res = await window.LLM.ask(joined);
+          res = await window.LLM.ask(joined, { max_tokens });
         }
       } else {
-        res = await window.LLM.ask(messagesOrString);
+        res = await window.LLM.ask(messagesOrString, { max_tokens });
       }
       res = typeof res === 'string' ? res.trim() : String(res ?? '').trim();
       if (res) return res;
@@ -153,20 +155,19 @@ async function llmAsk(messagesOrString, { retries = 1, delayMs = 300 } = {}) {
 }
 
 /* ------------------------------- prompts ---------------------------------- */
-async function aiQuestionMessages(meta, dedupHints = [], indexInBatch = 0) {
+async function aiQuestionMessages(meta, dedupHints = [], indexInBatch = 0, attempt = 0, banNumbers = []) {
   const area = metaToArea(meta);
   const level = meta.level || 'easy';
   const grade = meta.grade || '8';
   const sport = (meta.sport || 'basketball').toLowerCase();
 
-  const seen = getLearned(area, level).slice(0, 4);
-  const avoidTexts = [
-    ...seen.map(r => r.text).filter(Boolean),
-    ...dedupHints
-  ].join("\n---\n");
+  // Pull a few learned (per full combo) + current-session dedup hints
+  const learned = getLearned(meta).slice(0, 8).map(r => r.text).filter(Boolean);
+  const avoidTexts = [...learned, ...dedupHints].slice(-16).join("\n---\n");
+  const banned = Array.from(new Set(banNumbers)).slice(-20).join(", ");
 
   const seed = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const makeMCQ = wantMCQ(indexInBatch);
+  const makeMCQ = indexInBatch % 2 === 0; // alternate MCQ/Open
 
   const schema = makeMCQ
     ? { problem: "string", choices: "string[4]", answer_index: "integer 0..3", solution_html: "string" }
@@ -176,28 +177,39 @@ async function aiQuestionMessages(meta, dedupHints = [], indexInBatch = 0) {
     ? `Return JSON ONLY with keys: problem, choices (4 strings), answer_index (0..3), solution_html.`
     : `Return JSON ONLY with keys: problem, solution_html. No choices.`;
 
+  const strict = attempt > 0
+    ? `\nSTRICT DIFFERENCE: Your last output resembled recent items. Change the SCENARIO and the NUMBERS.\n` +
+      `- Do NOT reuse any sentence or template from AVOID_SIMILAR_TO.\n` +
+      `- Avoid these numbers entirely: [${banned}].\n` +
+      `- Vary verbs and entities; pick different players, times, distances, and units.\n` +
+      `- Ensure the new problem shares at most ~50% tokens with AVOID_SIMILAR_TO.`
+    : ``;
+
   const guide =
-    `You are Math Trainer LLM. Generate playful, rigorous ${makeMCQ ? "MCQ" : "open-ended"} math problems.
+`You are Math Trainer LLM. Generate playful, rigorous ${makeMCQ ? "MCQ" : "open-ended"} math problems.
 Constraints:
 - 2–4 sentences; use concrete numbers; solvable; no spoilers in problem text.
-- Keep difficulty and vocabulary to the selected grade level.
-- ${makeMCQ ? "Include exactly 4 plausible MCQ options with ONE correct." : "Do NOT include choices."}
+- Keep difficulty and vocabulary to the selected grade.
+- ${makeMCQ ? "Include exactly 4 plausible MCQ options with ONE correct (similar magnitude; no giveaways)." : "Do NOT include choices."}
+- The problem MUST be NEW for this (area, level, grade, sport) combo and DIFFER from recent items.
 - Produce JSON only.
 Tone: Friendly, concise classroom coach.`;
 
   const userPayload = {
     REQUIREMENTS: {
       AREA: area, LEVEL: level, GRADE: grade, SPORT: sport,
-      STYLE: "2-4 sentences", UNIQUE_CORRECT: true, NO_SPOILERS_IN_PROBLEM: true
+      STYLE: "2-4 sentences", UNIQUE_CORRECT: true, NO_SPOILERS_IN_PROBLEM: true,
+      PAIR_INDEX: indexInBatch, TYPE: makeMCQ ? "MCQ" : "OPEN"
     },
     AVOID_SIMILAR_TO: avoidTexts || "—",
+    BAN_NUMBERS: banned || "—",
     SEED: seed,
     FORMAT: { type: "json", schema }
   };
 
   return [
     { role: "system", content: guide.trim() },
-    { role: "user", content: JSON.stringify(userPayload) + "\n" + instructions }
+    { role: "user", content: JSON.stringify(userPayload) + "\n" + instructions + strict }
   ];
 }
 
@@ -206,27 +218,38 @@ async function aiSampleMessages(meta, plainProblem) {
   const level = meta.level || 'easy';
   const grade = meta.grade || '8';
   return [
-    { role: "system", content: "You are Math Trainer LLM Solver. Return a concise, correct solution in HTML with 3–6 short lines." },
+    {
+      role: "system",
+      content:
+        "You are Math Trainer LLM Solver. Output ONLY HTML with <br> for new lines. " +
+        "Write EXACTLY 3 very short lines: (1) key step, (2) compute, (3) <strong>Answer: ...</strong>. " +
+        "No prefaces like 'To find' or 'We need to'. Allowed tags: <br> and <strong> only. " +
+        "Keep total under 360 characters."
+    },
     {
       role: "user",
       content:
-        `Solve for a grade ${grade} ${area} problem (difficulty: ${level}).
+`Solve this grade ${grade} ${area} problem (difficulty: ${level}):
 
-Problem:
 ${plainProblem}
 
-Requirements:
-- 3–6 short lines; use math succinctly.
-- Keep units consistent; show final numeric result.
-- End with <strong>Answer: …</strong>.`
+Format (exactly 3 lines):
+line1: minimal setup or formula
+line2: compact computation
+line3: <strong>Answer: ...</strong>
+
+Rules:
+- Use numbers/symbols only; no prose.
+- Only <br> and <strong>.
+- Under 360 characters.`
     }
   ];
 }
 
 /* --------------------------- builders (MCQ/open) -------------------------- */
-async function aiBuildQuestion(meta, dedupHints = [], indexInBatch = 0) {
-  const msgs = await aiQuestionMessages(meta, dedupHints, indexInBatch);
-  const raw = await llmAsk(msgs);
+async function aiBuildQuestion(meta, dedupHints = [], indexInBatch = 0, attempt = 0, banNumbers = []) {
+  const msgs = await aiQuestionMessages(meta, dedupHints, indexInBatch, attempt, banNumbers);
+  const raw = await llmAsk(msgs, { max_tokens: 360 });
   const parsed = jsonExtract(raw);
   if (!parsed) throw new Error('LLM did not return valid JSON.');
   const data = sanitizePayload(parsed);
@@ -238,7 +261,7 @@ async function aiBuildQuestion(meta, dedupHints = [], indexInBatch = 0) {
     tag: cap(meta.area === 'mix' ? 'Mixed' : meta.area),
     plainProblem: data.problem,
     text: `${intro}<br><br>${emoji} ${data.problem}<br><br><small>${closer}</small>`,
-    solution_html: data.solution_html || '',
+    solution_html: '', // always generate concise solution on demand
     keywords: []
   };
 
@@ -252,7 +275,7 @@ async function aiBuildQuestion(meta, dedupHints = [], indexInBatch = 0) {
     q.correct = null;
   }
 
-  learn(metaToArea(meta), meta.level, q);
+  learn(meta, q);
   return q;
 }
 
@@ -262,26 +285,32 @@ async function generateUniqueQuestion(meta, indexInBatch = 0) {
   state.seen[key] = state.seen[key] || new Set();
   const seenSet = state.seen[key];
 
-  const recentTexts = Array.from(seenSet).slice(-4);
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const q = await aiBuildQuestion(meta, recentTexts, indexInBatch);
-    const text = (q.plainProblem || '').trim();
+  // Build recent problems + a list of banned numbers to push variety
+  const recentTexts = Array.from(seenSet).slice(-16);
+  const bannedNumbers = recentTexts.flatMap(extractNums).slice(-40);
+
+  for (let attempt = 0; attempt < 6; attempt++) { // more attempts, stricter each round
+    const q = await aiBuildQuestion(meta, recentTexts, indexInBatch, attempt, bannedNumbers);
+    const text = norm(q.plainProblem);
+    // DISTINCT across the whole batch (MCQ vs OPEN must differ too)
     if (text && !seenSet.has(text)) {
       seenSet.add(text);
       return q;
     }
-    recentTexts.push(text);
+    // strengthen hints for next try
+    recentTexts.push(q.plainProblem);
+    bannedNumbers.push(...extractNums(q.plainProblem));
   }
-  const fallback = await aiBuildQuestion(meta, recentTexts, indexInBatch);
-  const fbText = (fallback.plainProblem || '').trim();
-  seenSet.add(fbText);
-  return fallback;
+
+  // If it STILL repeats after 6 tries, return the last (model-only) but mark it
+  const last = await aiBuildQuestion(meta, recentTexts, indexInBatch, 6, bannedNumbers);
+  const txt = norm(last.plainProblem);
+  seenSet.add(txt);
+  return last;
 }
 
 /* ------------------------- history + UI rendering ------------------------- */
-const STORAGE_KEY = 'mathTrainerHistoryV4';
 function loadHistory() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [] } catch { return [] } }
-function saveHistory(item) { const d = loadHistory(); d.unshift(item); localStorage.setItem(STORAGE_KEY, JSON.stringify(d.slice(0, 200))); }
 function resetHistory() { localStorage.removeItem(STORAGE_KEY); }
 
 /* -------------------------------- choices UI ------------------------------ */
@@ -324,6 +353,48 @@ function evaluateAnswer(answer, q) {
   return { score: 0, verdict: 'Open-ended question — compare with the sample solution.', missing: [] };
 }
 
+/* ---------------------- solution normalizers (concise) -------------------- */
+function normalizeConcise(html) {
+  if (!html) return "";
+  // keep only <br> and <strong>
+  html = html.replace(/<(?!br\s*\/?>|strong\b)[^>]*>/gi, "").replace(/\s+/g, " ").trim();
+
+  // remove verbose starters
+  const starters = [
+    /^to\s+find[^:.,]*[:.,-]\s*/i,
+    /^we\s+need\s+to\s*/i,
+    /^(first|then|next|therefore|so|thus),?\s*/i
+  ];
+  starters.forEach(rx => { html = html.replace(rx, ""); });
+
+  // split and ensure an Answer line
+  let lines = html.split(/<br\s*\/?>/i).map(s => s.trim()).filter(Boolean);
+  const hasAnswer = lines.some(l => /(^|\b)answer\s*:/i.test(l));
+
+  if (!hasAnswer && lines.length) {
+    lines[lines.length - 1] = `<strong>Answer: ${lines[lines.length - 1]}</strong>`;
+  } else {
+    lines = lines.map(l => l.replace(/(^|\b)answer\s*:\s*/i, "<strong>Answer: ").replace(/<\/strong>$/i, ""));
+    lines = lines.map(l => /<strong>Answer: /.test(l) && !/<\/strong>/.test(l) ? l + "</strong>" : l);
+  }
+
+  // keep exactly 3 lines (first two trimmed), last = Answer
+  const maxLineLen = 100;
+  const cap = s => (s.length > maxLineLen ? s.slice(0, maxLineLen - 1) + "…" : s);
+
+  const answer = lines.find(l => /<strong>Answer:/i.test(l)) ?? lines[lines.length - 1];
+  const head = lines.filter(l => l !== answer).slice(0, 2).map(cap);
+  lines = [...head, answer];
+
+  return lines.join("<br>");
+}
+
+function shortenSolution(html, maxChars = 360) {
+  if (!html) return "";
+  html = html.replace(/<(?!br\s*\/?>|strong\b)[^>]*>/gi, "").replace(/\s+/g, " ").trim();
+  return html.length > maxChars ? html.slice(0, maxChars - 1) + "…" : html;
+}
+
 /* ------------------------- question rendering ----------------------------- */
 function renderQuestion() {
   const total = state.meta.qty || state.questions.length || 0;
@@ -348,12 +419,22 @@ function renderQuestion() {
   $("answer").value = '';
   renderChoices(q);
 
-  // nav buttons enable/disable
   const isSingleRolling = Number(state.meta.qty || 0) === 1;
   prevBtn.disabled = state.idx <= 0;
-  // keep Next enabled if qty=1 (rolling mode); otherwise lock at end
-  nextBtn.disabled = !isSingleRolling && state.idx >= total - 1;
+  nextBtn.disabled = !isSingleRolling && state.idx >= total - 1; // endless only when qty=1
   [copyBtn, evalBtn, sampleBtn].forEach(b => b && (b.disabled = false));
+}
+
+/* ---------------------------- history utilities --------------------------- */
+const STORAGE_KEY = 'mathTrainerHistoryV4';
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  catch { return []; }
+}
+
+function resetHistory() {
+  localStorage.removeItem(STORAGE_KEY);
 }
 
 function updateHistoryUI() {
@@ -362,13 +443,20 @@ function updateHistoryUI() {
   data.slice(0, 10).forEach(r => {
     const li = document.createElement('li');
     const left = document.createElement('span');
-    left.textContent = `${r.tag} · ${r.level} · G${r.grade}${r.sport ? ' · ' + r.sport : ''} · ${new Date(r.at).toLocaleString()}`;
+    left.textContent =
+      `${r.tag} · ${r.level} · G${r.grade}${r.sport ? ' · ' + r.sport : ''} · ${new Date(r.at).toLocaleString()}`;
     const right = document.createElement('strong'); right.textContent = `${r.score}/100`;
     li.appendChild(left); li.appendChild(right); list.appendChild(li);
   });
-  $("avg-score").textContent = data.length ? Math.round(data.reduce((s, r) => s + r.score, 0) / data.length) : '—';
+  $("avg-score").textContent = data.length
+    ? Math.round(data.reduce((s, r) => s + r.score, 0) / data.length)
+    : '—';
   $("attempts").textContent = data.length;
+
 }
+
+function loadHistory() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [] } catch { return [] } }
+function resetHistory() { localStorage.removeItem(STORAGE_KEY); }
 
 /* -------------------------------- bindings -------------------------------- */
 function setBusy(on) {
@@ -395,7 +483,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!level) { $("difficulty").reportValidity?.(); return; }
       if (!grade) { $("grade").reportValidity?.(); return; }
 
-      // reset state
       state = {
         questions: [],
         idx: 0,
@@ -412,20 +499,20 @@ document.addEventListener('DOMContentLoaded', () => {
       clearChoicesBox();
 
       setBusy(true);
-      $("progress").textContent = `0 / ${qty} ready…`;
+      setProgress(`0 / ${qty} ready…`);
       try {
         const key = comboKey(state.meta);
         state.seen[key] = new Set();
 
-        // generate EXACT qty; alternate MCQ/open by index
+        // generate EXACT qty; alternate MCQ/open by index and force uniqueness
         for (let i = 0; i < qty; i++) {
           const q = await generateUniqueQuestion(state.meta, i);
           state.questions.push(q);
-          $("progress").textContent = `${i + 1} / ${qty} ready…`;
+          setProgress(`${i + 1} / ${qty} ready…`);
         }
 
         state.idx = 0;
-        $("progress").textContent = `✅ Ready: ${qty} / ${qty}`;
+        setProgress(`✅ Ready: ${qty} / ${qty}`);
         renderQuestion();
       } catch (err) {
         console.error(err);
@@ -444,7 +531,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if ($("qty")) $("qty").value = 3;
     $("answer").value = '';
     state = { questions: [], idx: 0, meta: { area: '', sport: '', level: '', grade: '', qty: 3 }, seen: {}, mcqCount: 0, openCount: 0 };
-    $("progress").textContent = '';
+    setProgress('');
     renderQuestion();
   });
 
@@ -454,7 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderQuestion();
   });
 
-  // Navigate only; but if qty === 1, generate a fresh new question (rolling mode)
+  // Navigate only; if qty === 1, generate a fresh new question (rolling mode)
   $("btn-next")?.addEventListener('click', async () => {
     if (!state.questions.length) return;
     const limit = Number(state.meta.qty || state.questions.length);
@@ -486,7 +573,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const missingTxt = res.missing && res.missing.length ? ` Missing: <em>${res.missing.join(', ')}</em>` : '';
     $("status").innerHTML = `<span class="${res.score >= 60 ? 'ok' : 'bad'}">Score: ${res.score}/100</span> — ${res.verdict}.${missingTxt}`;
     const scoreItem = { tag: q.tag, score: res.score, at: Date.now(), level: state.meta.level, grade: state.meta.grade, sport: state.meta.sport };
-    const list = loadHistory(); const newList = [scoreItem, ...list].slice(0, 200);
+    const list = loadHistory(); const newList = [scoreItem, ...(list||[])].slice(0, 200);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newList));
     updateHistoryUI();
   });
@@ -497,12 +584,12 @@ document.addEventListener('DOMContentLoaded', () => {
     $("status").innerHTML = `<em>Generating solution…</em>`;
     setBusy(true);
     try {
-      let solution = q.solution_html;
-      if (!solution) {
-        const msgs = await aiSampleMessages(state.meta, q.plainProblem || $("problem").innerText);
-        solution = await llmAsk(msgs);
-        q.solution_html = solution;
-      }
+      // Always regenerate concise solution from the model (model-only)
+      const msgs = await aiSampleMessages(state.meta, q.plainProblem || $("problem").innerText);
+      let solution = await llmAsk(msgs, { max_tokens: 180 }); // concise + token saver
+      solution = normalizeConcise(solution);
+      solution = shortenSolution(solution);
+      q.solution_html = solution;
       $("status").innerHTML = `<em>Solution:</em><br>${solution}`;
     } catch (err) {
       console.error(err);
