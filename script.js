@@ -6,7 +6,7 @@ const $ = (id) => document.getElementById(id);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const cap = (s) => s ? s[0].toUpperCase() + s.slice(1) : s;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const MAX_QUESTIONS = 8;
+const MAX_QUESTIONS = 5;
 const setProgress = (text) => { const el = $('progress'); if (el) el.textContent = text; };
 const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 const extractNums = (s) => (String(s||'').match(/-?\d+(\.\d+)?/g) || []).slice(0, 40);
