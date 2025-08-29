@@ -11,6 +11,29 @@ const setProgress = (text) => { const el = $('progress'); if (el) el.textContent
 const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 const extractNums = (s) => (String(s||'').match(/-?\d+(\.\d+)?/g) || []).slice(0, 40);
 
+function userMessageFromError(e) {
+  const s = String(e && e.message || e || '').toLowerCase();
+
+  // Worker already returns friendly sentences as the error text.
+  // These branches catch pure network/browser errors:
+  if (/failed to fetch|networkerror|typeerror|cors|blocked/.test(s))
+    return "Network hiccup. Please check your connection and try again.";
+  if (/timeout|timed out|504/.test(s))
+    return "It’s taking a bit long. Let’s try that again.";
+  if (/not found|404/.test(s))
+    return "The generator isn’t reachable right now. Please try again.";
+  if (/unauthorized|401|forbidden|403|api key/.test(s))
+    return "The generator is warming up. Please try again shortly.";
+  if (/rate.?limit|429|quota|too many/.test(s))
+    return "We’re taking a quick breather. Please try again in a moment.";
+  if (/payment|402|billing|credit/.test(s))
+    return "We’re temporarily out of capacity. Please try again later.";
+  if (/invalid json|parse|schema|422|bad request/.test(s))
+    return "That request didn’t go through cleanly. One more try should fix it.";
+  return "Something unexpected happened. Please try again.";
+}
+
+
 /* ----------------------------- sports nouns ------------------------------- */
 const SPORTS = {
   cricket: { emoji: "🏏", noun: "runs", unit: "runs", field: "pitch" },
@@ -516,7 +539,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderQuestion();
       } catch (err) {
         console.error(err);
-        $("problem").innerHTML = `⚠️ LLM error: ${err?.message || 'unknown'}.<br><small>Tip: check your bridge, API key, and CORS.</small>`;
+        $("problem").innerHTML = `⚠️ ${userMessageFromError(err)}`;
       } finally {
         setBusy(false);
       }
@@ -555,7 +578,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderQuestion();
       } catch (err) {
         console.error(err);
-        alert(`LLM error: ${err?.message || 'unknown'}`);
+        alert(userMessageFromError(err));
       } finally {
         setBusy(false);
       }
@@ -593,7 +616,7 @@ document.addEventListener('DOMContentLoaded', () => {
       $("status").innerHTML = `<em>Solution:</em><br>${solution}`;
     } catch (err) {
       console.error(err);
-      $("status").innerHTML = `⚠️ LLM solution error: ${err?.message || 'unknown'}`;
+      $("status").innerHTML = `⚠️ ${userMessageFromError(err)}`;
     } finally {
       setBusy(false);
     }
