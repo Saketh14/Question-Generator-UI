@@ -167,7 +167,7 @@ Open your site (e.g., `http://localhost:5173`) and generate some questions 🎉
 
 ### Max questions
 
-* The app enforces **max 8** questions in memory.
+* The app enforces **max 5** questions in memory.
 * Change via `MAX_QUESTIONS` in `script.js`.
 
 ### Fresh question on Next
