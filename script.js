@@ -1,4 +1,4 @@
-// script.js — MCQ-only; verified answers; strong de-dupe; concise 3-line solutions
+// script.js — MCQ-only; verified answers; strong de-dupe; concise 3-line solutions; friendly UI errors
 'use strict';
 const $ = (id) => document.getElementById(id);
 
@@ -9,41 +9,60 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const MAX_QUESTIONS = 5;
 const setProgress = (text) => { const el = $('progress'); if (el) el.textContent = text; };
 const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
-const extractNums = (s) => (String(s||'').match(/-?\d+(\.\d+)?/g) || []).slice(0, 40);
+const extractNums = (s) => (String(s || '').match(/-?\d+(\.\d+)?/g) || []).slice(0, 40);
 
+/* ------------------------- friendly error → UI text ------------------------ */
 function userMessageFromError(e) {
-  const s = String(e && e.message || e || '').toLowerCase();
+  const raw = e && (e.message || e) || '';
+  const s = String(raw).toLowerCase();
+
+  // explicit 429 / rate limit
+  if (/lots of traffic right now|too many requests|rate.?limit|429|quota|rpm|tpm/.test(s))
+    return "Lots of traffic right now—try again in a few seconds.";
+
   if (/failed to fetch|networkerror|typeerror|cors|blocked/.test(s))
     return "Network hiccup. Please check your connection and try again.";
-  if (/timeout|timed out|504/.test(s))
+  if (/timeout|timed out|deadline|408|504/.test(s))
     return "It’s taking a bit long. Let’s try that again.";
-  if (/not found|404/.test(s))
+  if (/not found|404|unknown (path|route|url)/.test(s))
     return "The generator isn’t reachable right now. Please try again.";
-  if (/unauthorized|401|forbidden|403|api key/.test(s))
+  if (/unauthorized|401|forbidden|403|api key|unauthenticated|permission/.test(s))
     return "The generator is warming up. Please try again shortly.";
-  if (/rate.?limit|429|quota|too many/.test(s))
-    return "We’re taking a quick breather. Please try again in a moment.";
-  if (/payment|402|billing|credit/.test(s))
+  if (/payment|402|billing|credit|insufficient funds/.test(s))
     return "We’re temporarily out of capacity. Please try again later.";
-  if (/invalid json|parse|schema|422|bad request/.test(s))
+  if (/invalid json|parse|schema|422|bad request|400/.test(s))
     return "That request didn’t go through cleanly. One more try should fix it.";
+  if (/bad gateway|upstream|502|server busy|unavailable|503/.test(s))
+    return "We hit a small snag connecting. Please try once more.";
+
   return "Something unexpected happened. Please try again.";
+}
+
+// unified UI error display
+function showError(msg) {
+  const pretty = String(msg || "Something unexpected happened. Please try again.");
+  const problem = $("problem");
+  const statusEl = $("status");
+  if (problem) problem.innerHTML = `⚠️ ${pretty}`;
+  if (statusEl) statusEl.textContent = pretty;
+  setProgress('');
+  setBusy(false);
 }
 
 /* ----------------------------- sports nouns ------------------------------- */
 const SPORTS = {
   cricket: { emoji: "🏏", noun: "runs", unit: "runs", field: "pitch" },
   football: { emoji: "🏈", noun: "points", unit: "points", field: "field" },
-  soccer:   { emoji: "⚽", noun: "goals", unit: "goals", field: "pitch" },
-  basketball:{ emoji: "🏀", noun: "points", unit: "points", field: "court" },
-  tennis:   { emoji: "🎾", noun: "points", unit: "points", field: "court" }
+  soccer: { emoji: "⚽", noun: "goals", unit: "goals", field: "pitch" },
+  basketball: { emoji: "🏀", noun: "points", unit: "points", field: "court" },
+  tennis: { emoji: "🎾", noun: "points", unit: "points", field: "court" }
 };
-const sportEmoji = (s) => (SPORTS[(s||'').toLowerCase()]?.emoji || '🧠');
+const sportEmoji = (s) => (SPORTS[(s || '').toLowerCase()]?.emoji || '🧠');
 
 /* --------------------------- persistent “learning” ------------------------ */
 const LEARN_KEY = 'trainerLearnedV4';
 function comboLearnKey(meta) {
-  return `${(meta.area||'').toLowerCase()}|${(meta.level||'').toLowerCase()}|${(meta.grade||'').toLowerCase()}|${(meta.sport||'').toLowerCase()}`;
+  return `${(meta.area || '').toLowerCase()}|${(meta.level || '').toLowerCase()}|${(meta.grade || '').toLowerCase()}|${(meta.sport || '').toLowerCase()}`;
 }
 function loadLearned() { try { return JSON.parse(localStorage.getItem(LEARN_KEY)) || {} } catch { return {} } }
 function saveLearned(store) { localStorage.setItem(LEARN_KEY, JSON.stringify(store)); }
@@ -60,8 +79,8 @@ function learn(meta, q) {
 function getLearned(meta) { const store = loadLearned(); return store[comboLearnKey(meta)] || []; }
 
 /* ------------------------------ humor wrappers ---------------------------- */
-const NAMES = ["Rahul","Aisha","Maya","Arjun","Sam","Liam","Zara","Ishan","Neha","Kiran","Aarav","Anya"];
-const COACHES = ["Coach Vector","Captain Fraction","Professor Pi","Sir Integrator","Ms. Matrix"];
+const NAMES = ["Rahul", "Aisha", "Maya", "Arjun", "Sam", "Liam", "Zara", "Ishan", "Neha", "Kiran", "Aarav", "Anya"];
+const COACHES = ["Coach Vector", "Captain Fraction", "Professor Pi", "Sir Integrator", "Ms. Matrix"];
 const INTROS = [
   "{emoji} {coach}: Pssst, quick challenge for {name}!",
   "{emoji} Mission time! Help {name} solve this before the snack timer beeps.",
@@ -102,7 +121,7 @@ let state = {
 /* -------------------------------- helpers --------------------------------- */
 function metaToArea(meta) {
   const m = (meta.area || '').toLowerCase();
-  if (['algebra','geometry','trigonometry','probability','calculus','mix'].includes(m)) return m;
+  if (['algebra', 'geometry', 'trigonometry', 'probability', 'calculus', 'mix'].includes(m)) return m;
   return 'algebra';
 }
 
@@ -113,13 +132,13 @@ function jsonExtract(text) {
     const m = text.match(/```([\s\S]*?)```/);
     if (m && m[1]) text = m[1].trim();
   }
-  try { return JSON.parse(text); } catch {}
+  try { return JSON.parse(text); } catch { }
   const start = text.indexOf('{'), end = text.lastIndexOf('}');
   if (start !== -1 && end !== -1 && end > start) {
-    try { return JSON.parse(text.slice(start, end + 1)); } catch {}
+    try { return JSON.parse(text.slice(start, end + 1)); } catch { }
   }
   const rx = /{[\s\S]*?"problem"[\s\S]*?}/g; const match = rx.exec(text);
-  if (match) { try { return JSON.parse(match[0]); } catch {} }
+  if (match) { try { return JSON.parse(match[0]); } catch { } }
   return null;
 }
 
@@ -180,21 +199,20 @@ async function aiQuestionMessages(meta, dedupHints = [], indexInBatch = 0, attem
   const banned = Array.from(new Set(banNumbers)).slice(-14).join(", ");
 
   const seed = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const makeMCQ = true; // MCQ-ONLY
 
   const schema = { problem: "string", choices: "string[4]", answer_index: "integer 0..3", solution_html: "string" };
   const instructions = `Return JSON ONLY with keys: problem, choices (4 strings), answer_index (0..3), solution_html.`;
 
   const strict = attempt > 0
     ? `\nSTRICT DIFFERENCE: Your last output resembled recent items. Change the SCENARIO and the NUMBERS.\n` +
-      `- Do NOT reuse any sentence or template from AVOID_SIMILAR_TO.\n` +
-      `- Avoid these numbers entirely: [${banned}].\n` +
-      `- Rotate skill type (unit rates, fractions/percents, averages, ratios, perimeter/area, time, simple probability; for higher grades include algebra/linear equations etc.).\n` +
-      `- Ensure the new problem shares at most ~50% tokens with AVOID_SIMILAR_TO.`
+    `- Do NOT reuse any sentence or template from AVOID_SIMILAR_TO.\n` +
+    `- Avoid these numbers entirely: [${banned}].\n` +
+    `- Rotate skill type (unit rates, fractions/percents, averages, ratios, perimeter/area, time, simple probability; for higher grades include algebra/linear equations etc.).\n` +
+    `- Ensure the new problem shares at most ~50% tokens with AVOID_SIMILAR_TO.`
     : ``;
 
   const guide =
-`You are Math Trainer LLM. Generate playful, rigorous MCQ math problems (MCQ ONLY).
+    `You are Math Trainer LLM. Generate playful, rigorous MCQ math problems (MCQ ONLY).
 Constraints:
 - 2–4 sentences; use concrete numbers; solvable; no spoilers in problem text.
 - Keep difficulty and vocabulary to the selected grade.
@@ -283,10 +301,9 @@ function heuristicAnswer(problemText) {
   const p = String(problemText || '').toLowerCase();
   const nums = (p.match(/-?\d+(\.\d+)?/g) || []).map(parseFloat);
   if (/each\s+\w+\s+(is|=)\s+worth/.test(p) && nums.length >= 2) {
-    // try all pairs to allow single-total questions
     const unit = nums[nums.length - 1];
     if (isFinite(unit) && unit !== 0) {
-      const sum = nums.slice(0, -1).reduce((a,b)=>a+b,0);
+      const sum = nums.slice(0, -1).reduce((a, b) => a + b, 0);
       if (sum > 0) return sum / unit;
     }
   }
@@ -327,7 +344,7 @@ async function enforceMcqCorrectness(q, meta) {
   if (verified === null || !isFinite(verified)) return; // non-numeric or insufficient info
 
   const eps = 1e-9;
-  const equalish = (a,b) => Math.abs(a - b) <= eps;
+  const equalish = (a, b) => Math.abs(a - b) <= eps;
 
   // 2) Does any choice already equal the verified value?
   let idx = q.choices.findIndex(c => {
@@ -342,7 +359,7 @@ async function enforceMcqCorrectness(q, meta) {
   }
 
   // 3) Inject the correct value, preserve 4 options
-  const nice = Number.isInteger(verified) ? String(verified) : String(+verified.toFixed(4)).replace(/\.0+$/,'');
+  const nice = Number.isInteger(verified) ? String(verified) : String(+verified.toFixed(4)).replace(/\.0+$/, '');
   let replaceAt = Number.isInteger(q.answer_index) ? q.answer_index : 0;
   q.choices[replaceAt] = nice;
 
@@ -362,6 +379,7 @@ async function enforceMcqCorrectness(q, meta) {
 function normalizeConcise(html) {
   if (!html) return "";
   html = html.replace(/<(?!br\s*\/?>|strong\b)[^>]*>/gi, "").replace(/\s+/g, " ").trim();
+
   const starters = [
     /^to\s+find[^:.,]*[:.,-]\s*/i,
     /^we\s+need\s+to\s*/i,
@@ -629,7 +647,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderQuestion();
       } catch (err) {
         console.error(err);
-        $("problem").innerHTML = `⚠️ ${userMessageFromError(err)}`;
+        showError(userMessageFromError(err));
       } finally {
         setBusy(false);
       }
@@ -667,7 +685,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderQuestion();
       } catch (err) {
         console.error(err);
-        alert(userMessageFromError(err));
+        showError(userMessageFromError(err)); // show friendly UI message
       } finally {
         setBusy(false);
       }
@@ -685,7 +703,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const missingTxt = res.missing && res.missing.length ? ` Missing: <em>${res.missing.join(', ')}</em>` : '';
     $("status").innerHTML = `<span class="${res.score >= 60 ? 'ok' : 'bad'}">Score: ${res.score}/100</span> — ${res.verdict}.${missingTxt}`;
     const scoreItem = { tag: q.tag, score: res.score, at: Date.now(), level: state.meta.level, grade: state.meta.grade, sport: state.meta.sport };
-    const list = loadHistory(); const newList = [scoreItem, ...(list||[])].slice(0, 200);
+    const list = loadHistory(); const newList = [scoreItem, ...(list || [])].slice(0, 200);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newList));
     updateHistoryUI();
   });
@@ -708,7 +726,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (verified !== null && isFinite(verified)) {
         const shown = extractFinalAnswerNumber(solution);
-        const equal = (a,b) => Math.abs(a - b) <= 1e-9;
+        const equal = (a, b) => Math.abs(a - b) <= 1e-9;
 
         if (!isFinite(shown) || !equal(shown, verified)) {
           // regenerate with forced answer
@@ -734,7 +752,7 @@ document.addEventListener('DOMContentLoaded', () => {
       q.solution_html = solution;
     } catch (err) {
       console.error(err);
-      $("status").innerHTML = `⚠️ ${userMessageFromError(err)}`;
+      showError(userMessageFromError(err)); // show friendly UI message
     } finally {
       setBusy(false);
     }
@@ -755,4 +773,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   renderQuestion(); updateHistoryUI();
+});
+
+/* ----------- global safety nets: surface uncaught errors to the UI -------- */
+window.addEventListener('unhandledrejection', (ev) => {
+  try { showError(userMessageFromError(ev.reason)); }
+  catch { showError("Something unexpected happened. Please try again."); }
+  ev.preventDefault?.();
+});
+window.addEventListener('error', (ev) => {
+  try { showError(userMessageFromError(ev.error || ev.message)); }
+  catch { showError("Something unexpected happened. Please try again."); }
 });
