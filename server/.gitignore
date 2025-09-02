@@ -1,4 +1,4 @@
 .env
 node_modules/
-worker.js
-Math-Trainer.pdf
+worker.js/
+Math-Trainer.pdf/
